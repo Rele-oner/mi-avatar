@@ -2,18 +2,15 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Gemini Industrial MoCap Engine - 1000+ Logic</title>
+    <title>ULTRA-FAST MOCAP ENGINE V10</title>
     <style>
-        body { margin: 0; background-color: #00ff00; overflow: hidden; font-family: 'Segoe UI', monospace; }
-        #webcam { position: absolute; bottom: 20px; right: 20px; width: 240px; transform: scaleX(-1); border: 2px solid #00d2ff; border-radius: 12px; box-shadow: 0 0 20px rgba(0,210,255,0.5); z-index: 1000; }
-        #overlay { position: absolute; top: 0; left: 0; padding: 20px; color: #00ffaa; text-shadow: 1px 1px 2px black; pointer-events: none; }
+        body { margin: 0; background-color: #00ff00; overflow: hidden; }
+        #webcam { position: absolute; bottom: 10px; right: 10px; width: 180px; transform: scaleX(-1); border-radius: 5px; opacity: 0.5; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.8); padding: 10px; font-family: monospace; border-left: 3px solid #00d2ff; }
     </style>
 </head>
 <body>
-    <div id="overlay">
-        <h2>CORE ENGINE v2.0</h2>
-        <div id="stats">ESTADO: INICIALIZANDO CAPAS...</div>
-    </div>
+    <div id="ui">LATENCIA: <span id="ms">0</span>ms | STATUS: OK</div>
     <video id="webcam" autoplay playsinline></video>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
@@ -21,149 +18,95 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        /**
-         * CLASE: FILTRO ONE-EURO
-         * Proporciona estabilidad de grado militar al movimiento de los huesos.
-         */
-        class OneEuroFilter {
-            constructor(freq, mincutoff = 1.0, beta = 0.0, dcutoff = 1.0) {
-                this.freq = freq; this.mincutoff = mincutoff; this.beta = beta; this.dcutoff = dcutoff;
-                this.x = new LowPassFilter(this.alpha(mincutoff));
-                this.dx = new LowPassFilter(this.alpha(dcutoff));
-                this.lastTime = Date.now();
-            }
-            alpha(cutoff) { return 1.0 / (1.0 + this.freq / (2 * Math.PI * cutoff)); }
-            filter(value) {
-                let dx = (value - this.x.lastValue) * this.freq;
-                let edx = this.dx.filter(dx, this.alpha(this.dcutoff));
-                let cutoff = this.mincutoff + this.beta * Math.abs(edx);
-                return this.x.filter(value, this.alpha(cutoff));
-            }
-        }
-        class LowPassFilter {
-            constructor(alpha) { this.alpha = alpha; this.lastValue = 0; }
-            filter(value, alpha) {
-                let result = alpha * value + (1.0 - alpha) * this.lastValue;
-                this.lastValue = result;
-                return result;
-            }
-        }
-
-        // --- SISTEMA DE RENDERIZADO PROFESIONAL ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x00ff00);
-        const camera3D = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
-        camera3D.position.set(0, 0, 5);
+        const camera3D = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera3D.position.set(0, 0, 4);
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const group = new THREE.Group();
-        scene.add(group);
+        const light = new THREE.DirectionalLight(0xffffff, 1.2);
+        light.position.set(0, 10, 10);
+        scene.add(light, new THREE.AmbientLight(0xffffff, 0.4));
 
-        // Materiales con Shaders básicos
-        const matRobot = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.9, roughness: 0.1 });
-        const matGlow = new THREE.MeshStandardMaterial({ color: 0x00d2ff, emissive: 0x00d2ff });
+        // --- RIGGING MECÁNICO (OPTIMIZADO) ---
+        const mat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.2 });
+        const matG = new THREE.MeshStandardMaterial({ color: 0x00d2ff, emissive: 0x00d2ff });
 
-        // --- CONSTRUCCIÓN DE LA JERARQUÍA (RIGGING) ---
-        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.0, 0.3), matRobot);
-        group.add(torso);
+        const root = new THREE.Group();
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.25), mat);
+        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.35, 0.22), mat);
+        cabeza.position.y = 0.6;
+        root.add(torso, cabeza);
+        scene.add(root);
 
-        const headGroup = new THREE.Group();
-        const headBox = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.4, 0.3), matRobot);
-        const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.1), matGlow);
-        jaw.position.y = -0.2;
-        headGroup.add(headBox, jaw);
-        headGroup.position.y = 0.7;
-        torso.add(headGroup);
-
-        function createDeepLimb(side) {
-            const shoulder = new THREE.Group();
-            shoulder.position.set(side * 0.45, 0.4, 0);
-            
-            const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.06, 0.5), matRobot);
-            upper.position.y = -0.25;
-            
-            const elbow = new THREE.Group();
-            elbow.position.y = -0.5;
-            
-            const lower = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.5), matRobot);
-            lower.position.y = -0.25;
-
-            const hand = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), matGlow);
-            hand.position.y = -0.5;
-
-            elbow.add(lower, hand);
-            shoulder.add(upper, elbow);
-            torso.add(shoulder);
-            return { shoulder, elbow, hand };
+        function addLimb(side) {
+            const h = new THREE.Group();
+            h.position.set(side * 0.35, 0.35, 0);
+            const s = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.45), mat);
+            s.position.y = -0.225;
+            const c = new THREE.Group();
+            c.position.y = -0.45;
+            const i = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.04, 0.45), mat);
+            i.position.y = -0.225;
+            const m = new THREE.Mesh(new THREE.SphereGeometry(0.07), matG);
+            m.position.y = -0.45;
+            c.add(i, m); h.add(s, c); torso.add(h);
+            return { h, c };
         }
+        const bD = addLimb(-1); const bI = addLimb(1);
 
-        const armR = createDeepLimb(-1);
-        const armL = createDeepLimb(1);
-
-        // --- MOTOR DE PROCESAMIENTO ---
-        const filters = {};
-        const getFilt = (id) => {
-            if(!filters[id]) filters[id] = new OneEuroFilter(30, 0.1, 0.01);
-            return filters[id];
-        };
+        // --- FILTRADO DE PREDICCIÓN ---
+        const smoothing = 0.12; 
+        const state = {};
+        function fastLerp(id, target) {
+            if (!state[id]) state[id] = new THREE.Vector3().copy(target);
+            state[id].lerp(target, smoothing);
+            return state[id];
+        }
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, minDetectionConfidence: 0.7, minTrackingConfidence: 0.8 });
+        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6 });
 
         holistic.onResults((res) => {
-            if (!res.poseLandmarks) {
-                document.getElementById('stats').innerText = "SEÑAL DEBIL: MANTENIENDO POSTURA";
-                return;
-            }
-            document.getElementById('stats').innerText = "SYNC: ESTABLE (60FPS)";
-
+            const t0 = performance.now();
+            if (!res.poseLandmarks) return;
             const p = res.poseLandmarks;
-            const f = res.faceLandmarks;
 
-            // Procesar Centro de Gravedad
-            const midX = (p[11].x + p[12].x) / 2;
-            const midY = (p[11].y + p[12].y) / 2;
-            torso.position.x = getFilt('tx').filter((midX - 0.5) * -4);
-            torso.position.y = getFilt('ty').filter((midY - 0.5) * -4 + 0.5);
+            const toV = (pt) => new THREE.Vector3((pt.x - 0.5) * -3.5, (pt.y - 0.5) * -3.5, 0);
 
-            // Rotación de Cabeza avanzada (Pitch/Yaw/Roll)
-            if(f) {
-                const nose = f[1]; const forehead = f[10]; const chin = f[152];
-                const headDir = new THREE.Vector3(nose.x - forehead.x, nose.y - forehead.y, nose.z - forehead.z).normalize();
-                headGroup.lookAt(headGroup.position.clone().add(headDir));
-                
-                // Apertura de boca (Jaw logic)
-                const mouthTop = f[13]; const mouthBottom = f[14];
-                const gap = Math.abs(mouthTop.y - mouthBottom.y) * 5;
-                jaw.scale.y = 1 + gap;
+            // Mover base
+            const neck = fastLerp('neck', toV(p[0]));
+            root.position.set(neck.x, neck.y - 0.2, 0);
+
+            // Rotación de Cabeza simplificada
+            if(res.faceLandmarks) {
+                const f = res.faceLandmarks;
+                const top = new THREE.Vector3(f[10].x, f[10].y, f[10].z);
+                const bot = new THREE.Vector3(f[152].x, f[152].y, f[152].z);
+                const look = new THREE.Vector3().subVectors(top, bot).normalize();
+                cabeza.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), look);
             }
 
-            // Aplicar IK a los Brazos
-            solveIK(armR, p[11], p[13], p[15]);
-            solveIK(armL, p[12], p[14], p[16]);
+            // Brazos: Cinemática Inversa Veloz
+            updateL(bD, toV(p[11]), toV(p[13]), toV(p[15]));
+            updateL(bI, toV(p[12]), toV(p[14]), toV(p[16]));
+            
+            document.getElementById('ms').innerText = Math.round(performance.now() - t0);
         });
 
-        function solveIK(limb, h, c, w) {
-            // Suavizado de puntos clave
-            const vC = new THREE.Vector3(getFilt(h.x+'c').filter(c.x), getFilt(h.x+'cy').filter(c.y), c.z);
-            const vH = new THREE.Vector3(h.x, h.y, h.z);
-            const vW = new THREE.Vector3(getFilt(h.x+'w').filter(w.x), getFilt(h.x+'wy').filter(w.y), w.z);
-
-            // Orientación del hombro al codo
-            const dirUpper = new THREE.Vector3().subVectors(vC, vH).normalize();
-            limb.shoulder.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dirUpper);
-
-            // Orientación del codo a la muñeca
-            const dirLower = new THREE.Vector3().subVectors(vW, vC).normalize();
-            const localDir = dirLower.clone().applyQuaternion(limb.shoulder.quaternion.clone().invert());
-            limb.elbow.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), localDir);
+        function updateL(limb, h, c, m) {
+            const d1 = new THREE.Vector3().subVectors(c, h).normalize();
+            limb.h.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), d1);
+            const d2 = new THREE.Vector3().subVectors(m, c).normalize();
+            const loc = d2.applyQuaternion(limb.h.quaternion.clone().invert());
+            limb.c.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), loc);
         }
 
-        const camera = new Camera(videoElement, {
-            onFrame: async () => { await holistic.send({image: videoElement}); },
+        const camera = new Camera(document.getElementById('webcam'), {
+            onFrame: async () => { await holistic.send({image: document.getElementById('webcam')}); },
             width: 1280, height: 720
         });
         camera.start();
@@ -173,12 +116,6 @@
             renderer.render(scene, camera3D);
         }
         animate();
-
-        window.addEventListener('resize', () => {
-            camera3D.aspect = window.innerWidth / window.innerHeight;
-            camera3D.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     </script>
 </body>
 </html>
