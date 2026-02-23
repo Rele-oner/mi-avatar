@@ -2,21 +2,28 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Motor de Rotoscopia Ultra-Preciso V6</title>
+    <title>Robot Simulator - High Precision MoCap</title>
     <style>
-        body { margin: 0; background-color: #000; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        #webcam { position: absolute; bottom: 20px; right: 20px; width: 280px; transform: scaleX(-1); border: 2px solid #00d2ff; border-radius: 15px; box-shadow: 0 0 20px rgba(0, 210, 255, 0.5); z-index: 10; }
-        #ui-panel { position: absolute; top: 20px; left: 20px; color: #00d2ff; background: rgba(10, 10, 10, 0.9); padding: 25px; border-radius: 15px; border: 1px solid #00d2ff; pointer-events: none; min-width: 250px; }
-        .data-stream { font-family: 'Consolas', monospace; font-size: 11px; color: #00ffaa; margin-top: 10px; }
-        .grid-bg { position: fixed; width: 100vw; height: 100vh; background-image: linear-gradient(rgba(0,210,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,210,255,0.1) 1px, transparent 1px); background-size: 50px 50px; z-index: -1; }
+        body { margin: 0; background-color: #1a1a1a; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #webcam { position: absolute; bottom: 20px; right: 20px; width: 240px; transform: scaleX(-1); border: 2px solid #333; border-radius: 10px; }
+        #gui { position: absolute; top: 20px; left: 20px; color: #00d2ff; background: rgba(0,0,0,0.85); padding: 20px; border-radius: 8px; border: 1px solid #00d2ff; width: 280px; }
+        .slider-group { margin-bottom: 10px; font-size: 12px; }
+        input[type=range] { width: 100%; }
     </style>
 </head>
 <body>
-    <div class="grid-bg"></div>
-    <div id="ui-panel">
-        <b style="font-size: 20px; letter-spacing: 2px;">PRECISION MOCAP ENGINE</b><br>
-        <div style="height: 2px; background: #00d2ff; margin: 10px 0;"></div>
-        <div class="data-stream" id="stats">Sincronizando sensores...</div>
+    <div id="gui">
+        <b style="font-size: 16px;">SISTEMA DE CALIBRACIÓN</b>
+        <div style="height: 1px; background: #333; margin: 10px 0;"></div>
+        <div class="slider-group">
+            Largo Brazo Superior: <span id="val_up">0.4</span>
+            <input type="range" id="upArmScale" min="0.2" max="0.8" step="0.01" value="0.4">
+        </div>
+        <div class="slider-group">
+            Largo Antebrazo: <span id="val_low">0.4</span>
+            <input type="range" id="lowArmScale" min="0.2" max="0.8" step="0.01" value="0.4">
+        </div>
+        <div style="font-size: 10px; color: #777;">MODO: CINEMÁTICA INVERSA ACTIVA</div>
     </div>
     <video id="webcam" autoplay playsinline></video>
 
@@ -25,122 +32,116 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        const videoElement = document.getElementById('webcam');
-        const statsDisplay = document.getElementById('stats');
+        // CONFIGURACIÓN INICIAL DE PROPORCIONES
+        let config = { upArm: 0.4, lowArm: 0.4 };
 
-        // --- RENDERER DE GRADO INDUSTRIAL ---
         const scene = new THREE.Scene();
-        const camera3D = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        const camera3D = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const material = new THREE.MeshPhongMaterial({ color: 0x00d2ff, wireframe: false, flatShading: false });
+        // Iluminación profesional para ver volúmenes
         const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(1, 1, 2).normalize();
+        light.position.set(5, 5, 5);
         scene.add(light, new THREE.AmbientLight(0x404040));
 
-        // --- CONSTRUCCIÓN DEL ESQUELETO METICULOSO ---
-        const skeleton = {
-            cabeza: new THREE.Mesh(new THREE.SphereGeometry(0.22, 32, 32), material),
-            tronco: new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.2), material),
-            brazos: {
-                der: { sup: crearCilindro(0.05), inf: crearCilindro(0.04) },
-                izq: { sup: crearCilindro(0.05), inf: crearCilindro(0.04) }
-            },
-            manos: {
-                der: crearEstructuraMano(),
-                izq: crearEstructuraMano()
-            }
-        };
+        const matRobot = new THREE.MeshPhongMaterial({ color: 0x444444, shininess: 100 });
+        const matJoint = new THREE.MeshPhongMaterial({ color: 0x00d2ff });
 
-        function crearCilindro(radio) {
-            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radio, radio * 0.8, 1, 16), material);
-            mesh.visible = false;
-            scene.add(mesh);
-            return mesh;
+        // FUNCIÓN PARA CREAR EXTREMIDADES ROBÓTICAS CON ARTICULACIONES
+        function createRobotLimb(side) {
+            const shoulder = new THREE.Group();
+            
+            // Hueso Superior
+            const upper = new THREE.Mesh(new THREE.BoxGeometry(0.08, config.upArm, 0.08), matRobot);
+            upper.position.y = -config.upArm / 2;
+            
+            const elbow = new THREE.Group();
+            elbow.position.y = -config.upArm;
+            
+            // Hueso Inferior
+            const lower = new THREE.Mesh(new THREE.BoxGeometry(0.06, config.lowArm, 0.06), matRobot);
+            lower.position.y = -config.lowArm / 2;
+
+            const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), matJoint);
+            hand.position.y = -config.lowArm;
+
+            elbow.add(lower, hand);
+            shoulder.add(upper, elbow);
+            scene.add(shoulder);
+
+            return { shoulder, elbow, upper, lower, hand };
         }
 
-        function crearEstructuraMano() {
-            // Creamos 21 esferas para representar cada articulación de la mano
-            return Array.from({ length: 21 }, () => {
-                const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), material);
-                sphere.visible = false;
-                scene.add(sphere);
-                return sphere;
-            });
-        }
+        const armR = createRobotLimb('R');
+        const armL = createRobotLimb('L');
+        
+        // Cuerpo Central (Tronco y Cabeza)
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.2), matRobot);
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.3, 0.2), matRobot);
+        scene.add(body, head);
 
-        scene.add(skeleton.cabeza, skeleton.tronco);
-        camera3D.position.set(0, 0, 4);
+        camera3D.position.set(0, 0, 3);
 
-        // --- FILTRADO DE DATOS AVANZADO (Exponential Smoothing) ---
-        const smoothingFactor = 0.2; 
-        const history = {};
-
-        function filter(id, vec) {
-            if (!history[id]) history[id] = new THREE.Vector3().copy(vec);
-            history[id].lerp(vec, smoothingFactor);
-            return history[id];
-        }
-
-        // --- LÓGICA DE PROCESAMIENTO ---
+        // MOTOR DE SEGUIMIENTO
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({
-            modelComplexity: 2, // MÁXIMA PRECISIÓN
-            smoothLandmarks: true,
-            minDetectionConfidence: 0.7,
-            minTrackingConfidence: 0.7
-        });
+        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
 
         holistic.onResults((res) => {
-            if (!res.poseLandmarks) {
-                statsDisplay.innerHTML = "ESTADO: BUSCANDO SUJETO...";
-                return;
-            }
-
-            statsDisplay.innerHTML = `LATENCIA: ${Math.round(performance.now() % 100)}ms<br>RESOLUCIÓN: 1280x720<br>TRACKING: 3D FULL BODY`;
-
+            if (!res.poseLandmarks) return;
             const p = res.poseLandmarks;
-            const toV = (pt) => new THREE.Vector3((pt.x - 0.5) * -4, (pt.y - 0.5) * -4, pt.z * -3);
 
-            // Filtrado de puntos clave
-            const hD = filter('hD', toV(p[11])), hI = filter('hI', toV(p[12]));
-            const cD = filter('cD', toV(p[13])), cI = filter('cI', toV(p[14]));
-            const mD = filter('mD', toV(p[15])), mI = filter('mI', toV(p[16]));
+            const map = (id) => new THREE.Vector3((p[id].x - 0.5) * -3.5, (p[id].y - 0.5) * -3.5, p[id].z * -2);
 
-            // 1. Cabeza y Tronco
-            const nariz = filter('n', toV(p[0]));
-            skeleton.cabeza.position.copy(nariz).add(new THREE.Vector3(0, 0.2, 0));
-            skeleton.tronco.position.set((hD.x + hI.x)/2, (hD.y + hI.y)/2 - 0.35, (hD.z + hI.z)/2);
-            skeleton.tronco.lookAt(hI.x, (hD.y + hI.y)/2 - 0.35, hI.z); // Orientación del pecho
+            // Posicionamiento de Hombros Reales
+            const sR = map(11); const sL = map(12);
+            const cR = map(13); const cL = map(14);
+            const wR = map(15); const wL = map(16);
 
-            // 2. Brazos
-            updateBone(skeleton.brazos.der.sup, hD, cD, p[11].visibility, p[13].visibility);
-            updateBone(skeleton.brazos.der.inf, cD, mD, p[13].visibility, p[15].visibility);
-            updateBone(skeleton.brazos.izq.sup, hI, cI, p[12].visibility, p[14].visibility);
-            updateBone(skeleton.brazos.izq.inf, cI, mI, p[14].visibility, p[16].visibility);
+            // Centrar Cuerpo
+            body.position.set((sR.x + sL.x)/2, (sR.y + sL.y)/2 - 0.3, (sR.z + sL.z)/2);
+            head.position.set(map(0).x, map(0).y + 0.2, map(0).z);
 
-            // 3. Manos (Seguimiento de 21 puntos por mano)
-            updateHand(res.rightHandLandmarks, skeleton.manos.der, mD);
-            updateHand(res.leftHandLandmarks, skeleton.manos.izq, mI);
+            // Lógica de Rotación Cinemática (Apunta el hueso al siguiente punto)
+            updateLimbLogic(armR, sR, cR, wR);
+            updateLimbLogic(armL, sL, cL, wL);
         });
 
-        function updateBone(mesh, start, end, v1, v2) {
-            if (v1 < 0.6 || v2 < 0.6) { mesh.visible = false; return; }
-            mesh.visible = true;
-            const dir = new THREE.Vector3().subVectors(end, start);
-            mesh.scale.y = dir.length();
-            mesh.position.copy(start).add(dir.clone().multiplyScalar(0.5));
-            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+        function updateLimbLogic(limb, start, mid, end) {
+            limb.shoulder.position.copy(start);
+            
+            // Orientar brazo superior al codo
+            const dirUpper = new THREE.Vector3().subVectors(mid, start).normalize();
+            limb.shoulder.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dirUpper);
+
+            // Orientar antebrazo a la muñeca (localmente)
+            const dirLower = new THREE.Vector3().subVectors(end, mid).normalize();
+            const localDir = dirLower.clone().applyQuaternion(limb.shoulder.quaternion.clone().invert());
+            limb.elbow.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), localDir);
         }
 
-        function updateHand(handPts, meshes, wristRef) {
-            if (!handPts) { meshes.forEach(m => m.visible = false); return; }
-            handPts.forEach((pt, i) => {
-                meshes[i].visible = true;
-                // Posición absoluta mitigando la deriva de profundidad
-                meshes[i].position.set((pt.x - 0.5) * -4, (pt.y - 0.5) * -4, pt.z * -3);
+        // CONTROL DE CALIBRACIÓN
+        document.getElementById('upArmScale').addEventListener('input', (e) => {
+            config.upArm = parseFloat(e.target.value);
+            document.getElementById('val_up').innerText = config.upArm;
+            actualizarGeometria();
+        });
+
+        document.getElementById('lowArmScale').addEventListener('input', (e) => {
+            config.lowArm = parseFloat(e.target.value);
+            document.getElementById('val_low').innerText = config.lowArm;
+            actualizarGeometria();
+        });
+
+        function actualizarGeometria() {
+            [armR, armL].forEach(a => {
+                a.upper.geometry = new THREE.BoxGeometry(0.08, config.upArm, 0.08);
+                a.upper.geometry.translate(0, -config.upArm / 2, 0);
+                a.elbow.position.y = -config.upArm;
+                a.lower.geometry = new THREE.BoxGeometry(0.06, config.lowArm, 0.06);
+                a.lower.geometry.translate(0, -config.lowArm / 2, 0);
+                a.hand.position.y = -config.lowArm;
             });
         }
 
@@ -155,12 +156,6 @@
             renderer.render(scene, camera3D);
         }
         animate();
-
-        window.addEventListener('resize', () => {
-            camera3D.aspect = window.innerWidth / window.innerHeight;
-            camera3D.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     </script>
 </body>
 </html>
