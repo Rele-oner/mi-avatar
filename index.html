@@ -1,19 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Rotoscopia Maestra - Captura Directa</title>
+    <title>Rotoscopia Inteligente - Movimiento Humano</title>
     <style>
         body { margin: 0; background-color: #00ff00; overflow: hidden; }
-        #webcam { position: absolute; bottom: 10px; right: 10px; width: 220px; transform: scaleX(-1); border: 2px solid white; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
-        #status { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.8); padding: 15px; font-family: sans-serif; border-radius: 8px; border-left: 5px solid #00ff00; }
+        #webcam { position: absolute; bottom: 10px; right: 10px; width: 200px; transform: scaleX(-1); border: 2px solid white; border-radius: 10px; }
+        #status { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.8); padding: 12px; font-family: sans-serif; border-radius: 8px; }
     </style>
 </head>
 <body>
-    <div id="status">
-        <b>SISTEMA DE ROTOSCOPIA</b><br>
-        Estado: <span id="info">Sincronizando...</span><br>
-        <small>Asegúrate de que se vean tus codos</small>
-    </div>
+    <div id="status">Estado: <span id="info">Esperando...</span></div>
     <video id="webcam" autoplay playsinline></video>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
@@ -32,63 +28,80 @@
 
         const material = new THREE.MeshNormalMaterial();
         
-        // Elementos del cuerpo independientes para máxima libertad de movimiento
-        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.45, 0.3), material);
-        const tronco = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.2), material);
-        
-        // Brazos segmentados
-        const crearParte = () => new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1), material);
-        const bDerSup = crearParte(); const bDerInf = crearParte();
-        const bIzqSup = crearParte(); const bIzqInf = crearParte();
+        // Función para crear partes del cuerpo que pueden desaparecer
+        const crearParte = (geo) => {
+            const mesh = new THREE.Mesh(geo, material);
+            mesh.visible = false; // Empiezan invisibles
+            scene.add(mesh);
+            return mesh;
+        };
 
-        scene.add(cabeza, tronco, bDerSup, bDerInf, bIzqSup, bIzqInf);
-        camera3D.position.z = 4;
+        const cabeza = crearParte(new THREE.BoxGeometry(0.35, 0.45, 0.3));
+        const tronco = crearParte(new THREE.BoxGeometry(0.6, 0.8, 0.2));
+        
+        const brazoD_S = crearParte(new THREE.CylinderGeometry(0.05, 0.04, 1));
+        const brazoD_I = crearParte(new THREE.CylinderGeometry(0.04, 0.03, 1));
+        const brazoI_S = crearParte(new THREE.CylinderGeometry(0.05, 0.04, 1));
+        const brazoI_I = crearParte(new THREE.CylinderGeometry(0.04, 0.03, 1));
+
+        camera3D.position.z = 3.5;
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
         holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
         holistic.onResults((res) => {
             if (!res.poseLandmarks) {
-                info.innerText = "BUSCANDO SILUETA...";
+                info.innerText = "FUERA DE CÁMARA";
+                [cabeza, tronco, brazoD_S, brazoD_I, brazoI_S, brazoI_I].forEach(p => p.visible = false);
                 return;
             }
-            info.innerText = "SINCRONIZACIÓN PERFECTA";
+            info.innerText = "TRACKING ACTIVO";
             const p = res.poseLandmarks;
 
-            // Función para convertir coordenadas de MediaPipe a Three.js
-            const map = (point) => ({
-                x: (point.x - 0.5) * -4,
-                y: (point.y - 0.5) * -4,
-                z: point.z * -2
+            const to3D = (pt) => ({
+                x: (pt.x - 0.5) * -4,
+                y: (pt.y - 0.5) * -4,
+                z: pt.z * -2,
+                v: pt.visibility // Importante: nivel de confianza
             });
 
-            // 1. Cabeza y Tronco
-            const n = map(p[0]); // Nariz
-            cabeza.position.set(n.x, n.y + 0.3, n.z);
-            
-            const hDer = map(p[11]); const hIzq = map(p[12]);
-            tronco.position.set((hDer.x + hIzq.x)/2, (hDer.y + hIzq.y)/2 - 0.4, (hDer.z + hIzq.z)/2);
+            // Lógica de Visibilidad y Posición
+            // Cabeza
+            if (p[0].visibility > 0.5) {
+                cabeza.visible = true;
+                const n = to3D(p[0]);
+                cabeza.position.set(n.x, n.y + 0.3, n.z);
+            } else { cabeza.visible = false; }
 
-            // 2. BRAZO DERECHO (Hombro -> Codo -> Muñeca)
-            const cDer = map(p[13]); const mDer = map(p[15]);
-            actualizarHueso(bDerSup, hDer, cDer);
-            actualizarHueso(bDerInf, cDer, mDer);
+            // Tronco (Hombros 11 y 12)
+            if (p[11].visibility > 0.5 && p[12].visibility > 0.5) {
+                tronco.visible = true;
+                const h1 = to3D(p[11]); const h2 = to3D(p[12]);
+                tronco.position.set((h1.x + h2.x)/2, (h1.y + h2.y)/2 - 0.4, (h1.z + h2.z)/2);
+            } else { tronco.visible = false; }
 
-            // 3. BRAZO IZQUIERDO (Hombro -> Codo -> Muñeca)
-            const cIzq = map(p[14]); const mIzq = map(p[16]);
-            actualizarHueso(bIzqSup, hIzq, cIzq);
-            actualizarHueso(bIzqInf, cIzq, mIzq);
+            // Brazos: Solo aparecen si la confianza es alta
+            updateBone(brazoD_S, to3D(p[11]), to3D(p[13]), 0.5); // Hombro-Codo D
+            updateBone(brazoD_I, to3D(p[13]), to3D(p[15]), 0.5); // Codo-Muñeca D
+            updateBone(brazoI_S, to3D(p[12]), to3D(p[14]), 0.5); // Hombro-Codo I
+            updateBone(brazoI_I, to3D(p[14]), to3D(p[16]), 0.5); // Codo-Muñeca I
         });
 
-        function actualizarHueso(malla, inicio, fin) {
-            const startV = new THREE.Vector3(inicio.x, inicio.y, inicio.z);
-            const endV = new THREE.Vector3(fin.x, fin.y, fin.z);
-            const dir = new THREE.Vector3().subVectors(endV, startV);
-            const len = dir.length();
+        function updateBone(mesh, start, end, threshold) {
+            // Si alguno de los dos puntos no es visible, ocultamos el hueso
+            if (start.v < threshold || end.v < threshold) {
+                mesh.visible = false;
+                return;
+            }
             
-            malla.scale.y = len; // Ajusta el largo del cilindro a tu brazo real
-            malla.position.copy(startV).add(dir.multiplyScalar(0.5));
-            malla.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+            mesh.visible = true;
+            const startV = new THREE.Vector3(start.x, start.y, start.z);
+            const endV = new THREE.Vector3(end.x, end.y, end.z);
+            const dir = new THREE.Vector3().subVectors(endV, startV);
+            
+            mesh.scale.y = dir.length();
+            mesh.position.copy(startV).add(dir.clone().multiplyScalar(0.5));
+            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
         }
 
         const camera = new Camera(videoElement, {
