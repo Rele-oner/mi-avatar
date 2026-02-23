@@ -1,55 +1,67 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Mi Avatar Stream</title>
+    <title>Mi Avatar - Sistema de Tracking Puro</title>
     <style>
         body { margin: 0; background-color: #00ff00; overflow: hidden; }
-        #webcam { position: absolute; bottom: 10px; right: 10px; width: 200px; z-index: 10; transform: scaleX(-1); border-radius: 10px; }
+        #webcam { position: absolute; bottom: 10px; right: 10px; width: 180px; z-index: 10; transform: scaleX(-1); border: 2px solid #fff; border-radius: 5px; }
+        #indicador { position: absolute; top: 10px; left: 10px; color: white; font-family: Arial; background: rgba(0,0,0,0.5); padding: 10px; }
     </style>
 </head>
 <body>
+    <div id="indicador">Estado: Iniciando Cámara...</div>
     <video id="webcam" autoplay playsinline></video>
+
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
     <script>
         const videoElement = document.getElementById('webcam');
+        const indicador = document.getElementById('indicador');
+
+        // --- CONFIGURACIÓN 3D ---
         const scene = new THREE.Scene();
         const camera3D = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(0, 1, 2);
-        scene.add(light);
-        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-        camera3D.position.set(0, 0, 3);
+        // Creamos un maniquí básico (Cabeza y Manos) para probar
+        const grupoAvatar = new THREE.Group();
+        
+        // Cabeza
+        const cabezaGeo = new THREE.BoxGeometry(0.5, 0.6, 0.4);
+        const material = new THREE.MeshNormalMaterial(); // Colores según movimiento
+        const cabeza = new THREE.Mesh(cabezaGeo, material);
+        grupoAvatar.add(cabeza);
 
-        let avatar, skeleton;
-        const loader = new THREE.GLTFLoader();
-        loader.load('avatar.glb', (gltf) => {
-            avatar = gltf.scene;
-            scene.add(avatar);
-            avatar.position.y = -1.5;
-            // Aquí detectamos los huesos para moverlos después
-            skeleton = new THREE.SkeletonHelper(avatar);
-        });
+        // Ojos (para ver hacia dónde miras)
+        const ojoGeo = new THREE.SphereGeometry(0.05, 10, 10);
+        const ojoIzq = new THREE.Mesh(ojoGeo, new THREE.MeshBasicMaterial({color: 0x000000}));
+        ojoIzq.position.set(-0.15, 0.1, 0.2);
+        const ojoDer = ojoIzq.clone();
+        ojoDer.position.x = 0.15;
+        cabeza.add(ojoIzq, ojoDer);
 
+        scene.add(grupoAvatar);
+        camera3D.position.z = 3;
+
+        // --- CONFIGURACIÓN TRACKING ---
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
         holistic.setOptions({ modelComplexity: 1, refineFaceLandmarks: true });
 
         holistic.onResults((results) => {
-            if (!avatar) return;
+            indicador.innerText = "Tracking: RECIBIENDO DATOS";
             
-            // Movimiento básico de cabeza
             if (results.faceLandmarks) {
-                const head = results.faceLandmarks[1]; 
-                avatar.rotation.y = (head.x - 0.5) * -1;
-                avatar.rotation.x = (head.y - 0.5);
+                // Movimiento de la cabeza
+                const nose = results.faceLandmarks[1];
+                cabeza.rotation.y = (nose.x - 0.5) * -2;
+                cabeza.rotation.x = (nose.y - 0.5) * 2;
             }
+
+            // Aquí añadiremos el código de los dedos en el siguiente paso
         });
 
         const camera = new Camera(videoElement, {
