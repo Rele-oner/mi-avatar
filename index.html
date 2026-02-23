@@ -3,81 +3,152 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Full Body Tracker - Capture</title>
+    <title>AI Avatar Mirror - Holistic Tracker</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f0f0f; color: #00ffcc; margin: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
-        .header { padding: 10px; text-shadow: 0 0 10px #00ffcc; }
-        .container { position: relative; width: 80vw; height: 70vh; display: flex; justify-content: center; }
-        #webcam { display: none; } /* Ocultamos el video original para ver solo el dibujo */
-        #output_canvas { background: #1a1a1a; border: 2px solid #00ffcc; border-radius: 15px; box-shadow: 0 0 20px rgba(0, 255, 204, 0.2); max-width: 100%; max-height: 100%; transform: rotateY(180deg); }
-        .controls { margin-top: 20px; background: rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 10px; text-align: center; min-width: 300px; }
-        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; justify-content: center; align-items: center; z-index: 10; }
+        body { 
+            font-family: 'Courier New', Courier, monospace; 
+            background: #050505; 
+            color: #00ffcc; 
+            margin: 0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+        }
+        .header { padding: 15px; text-align: center; width: 100%; border-bottom: 1px solid #333; }
+        
+        /* Contenedor Dual */
+        .main-view { 
+            display: flex; 
+            justify-content: space-around; 
+            align-items: center; 
+            width: 95vw; 
+            height: 70vh; 
+            margin-top: 20px;
+            gap: 20px;
+        }
+
+        .view-box {
+            position: relative;
+            flex: 1;
+            background: #111;
+            border: 2px solid #333;
+            border-radius: 10px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        video { display: none; }
+        canvas { 
+            max-width: 100%; 
+            max-height: 100%; 
+            transform: rotateY(180deg); 
+        }
+
+        .label {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 255, 204, 0.2);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            z-index: 5;
+        }
+
+        .loading-overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #000; display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; z-index: 100; 
+        }
     </style>
 </head>
 <body>
 
-    <div id="loader" class="loading-overlay"><h1>Iniciando Motores de Captura...</h1></div>
+    <div id="loader" class="loading-overlay">
+        <h1>SINCRONIZANDO AVATAR...</h1>
+        <p>Cargando red neuronal holística</p>
+    </div>
 
     <div class="header">
-        <h2>SISTEMA DE CAPTURA HOLÍSTICA (CUERPO, MANOS Y CARA)</h2>
+        <h2>SISTEMA DE DUPLICACIÓN DE MOVIMIENTO</h2>
     </div>
 
-    <div class="container">
-        <video id="webcam"></video>
-        <canvas id="output_canvas"></canvas>
-    </div>
+    <div class="main-view">
+        <div class="view-box">
+            <div class="label">CAPTURA DE VIDEO</div>
+            <video id="webcam"></video>
+            <canvas id="canvas_capture"></canvas>
+        </div>
 
-    <div class="controls">
-        <div id="status">Buscando sujeto...</div>
-        <small style="color: #888;">Mueve las manos y el cuerpo frente a la cámara</small>
+        <div class="view-box">
+            <div class="label">MONIGOTE (AVATAR)</div>
+            <canvas id="canvas_avatar"></canvas>
+        </div>
     </div>
 
     <script type="module">
         const videoElement = document.getElementById('webcam');
-        const canvasElement = document.getElementById('output_canvas');
-        const canvasCtx = canvasElement.getContext('2d');
+        const canvasCapture = document.getElementById('canvas_capture');
+        const canvasAvatar = document.getElementById('canvas_avatar');
+        
+        const ctxCap = canvasCapture.getContext('2d');
+        const ctxAva = canvasAvatar.getContext('2d');
         const loader = document.getElementById('loader');
-        const status = document.getElementById('status');
 
         function onResults(results) {
-            // Quitar el loader cuando llegue el primer resultado
             loader.style.display = "none";
             
-            // Ajustar tamaño del canvas al video
-            canvasElement.width = videoElement.videoWidth;
-            canvasElement.height = videoElement.videoHeight;
+            // Ajustar resolución
+            [canvasCapture, canvasAvatar].forEach(c => {
+                c.width = videoElement.videoWidth;
+                c.height = videoElement.videoHeight;
+            });
 
-            canvasCtx.save();
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            // --- DIBUJO CAPTURA (IZQUIERDA) ---
+            ctxCap.save();
+            ctxCap.clearRect(0, 0, canvasCapture.width, canvasCapture.height);
+            ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
             
-            // Dibujar fondo oscuro semi-transparente
-            canvasCtx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+            // Dibujar mallas sobre la imagen real
+            drawConnectors(ctxCap, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC', lineWidth: 2});
+            drawConnectors(ctxCap, results.faceLandmarks, FACEMESH_TESSELATION, {color: '#C0C0C040', lineWidth: 1});
+            drawConnectors(ctxCap, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FF0000', lineWidth: 2});
+            drawConnectors(ctxCap, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
+            ctxCap.restore();
 
-            // 1. Dibujar Pose (Cuerpo y brazos)
-            drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC', lineWidth: 4});
-            drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#FF0000', lineWidth: 2});
 
-            // 2. Dibujar Manos (Dedos detallados)
-            drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#CCFF00', lineWidth: 5});
-            drawLandmarks(canvasCtx, results.leftHandLandmarks, {color: '#00FFCC', lineWidth: 2});
-            drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#00FFCC', lineWidth: 5});
-            drawLandmarks(canvasCtx, results.rightHandLandmarks, {color: '#CCFF00', lineWidth: 2});
+            // --- DIBUJO MONIGOTE (DERECHA) ---
+            ctxAva.save();
+            ctxAva.clearRect(0, 0, canvasAvatar.width, canvasAvatar.height);
+            // Fondo sólido para el monigote
+            ctxAva.fillStyle = "#111";
+            ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
 
-            // 3. Dibujar Cara (Malla completa)
-            drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_TESSELATION, {color: '#C0C0C070', lineWidth: 1});
-            
-            if(results.poseLandmarks) {
-                status.innerText = "Sujeto detectado - Tracking Activo";
-            } else {
-                status.innerText = "Buscando sujeto...";
+            // Dibujar esqueleto (Monigote)
+            // Cuerpo
+            if (results.poseLandmarks) {
+                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#FFFFFF', lineWidth: 5});
+                drawLandmarks(ctxAva, results.poseLandmarks, {color: '#00ffcc', lineWidth: 1, radius: 3});
+            }
+            // Manos
+            if (results.leftHandLandmarks) {
+                drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 3});
+            }
+            if (results.rightHandLandmarks) {
+                drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 3});
+            }
+            // Cara (Simplificada para el monigote)
+            if (results.faceLandmarks) {
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_CONTOURS, {color: '#00ffcc', lineWidth: 2});
             }
 
-            canvasCtx.restore();
+            ctxAva.restore();
         }
 
         const holistic = new Holistic({locateFile: (file) => {
@@ -87,8 +158,6 @@
         holistic.setOptions({
             modelComplexity: 1,
             smoothLandmarks: true,
-            enableSegmentation: false,
-            smoothSegmentation: true,
             refineFaceLandmarks: true,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
@@ -97,11 +166,9 @@
         holistic.onResults(onResults);
 
         const camera = new Camera(videoElement, {
-            onFrame: async () => {
-                await holistic.send({image: videoElement});
-            },
-            width: 1280,
-            height: 720
+            onFrame: async () => { await holistic.send({image: videoElement}); },
+            width: 640,
+            height: 480
         });
         camera.start();
     </script>
