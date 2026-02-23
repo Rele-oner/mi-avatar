@@ -2,20 +2,18 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Robot MoCap Professional Edition</title>
+    <title>Mocap Ultra-Persistente V7</title>
     <style>
-        body { margin: 0; background-color: #050505; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-        #webcam { position: absolute; bottom: 20px; right: 20px; width: 220px; transform: scaleX(-1); border-radius: 12px; border: 2px solid #444; }
-        #ui { position: absolute; top: 20px; left: 20px; color: #00d2ff; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; border: 1px solid #333; }
-        .bar { width: 100%; height: 4px; background: #222; margin-top: 10px; border-radius: 2px; }
-        .fill { height: 100%; background: #00d2ff; width: 0%; transition: width 0.2s; }
+        body { margin: 0; background-color: #000; overflow: hidden; font-family: 'Consolas', monospace; }
+        #webcam { position: absolute; bottom: 20px; right: 20px; width: 260px; transform: scaleX(-1); border: 2px solid #00d2ff; border-radius: 10px; opacity: 0.8; }
+        #debug { position: absolute; top: 20px; left: 20px; color: #00ffaa; background: rgba(0,0,0,0.9); padding: 15px; border-radius: 5px; border-left: 4px solid #00d2ff; pointer-events: none; }
     </style>
 </head>
 <body>
-    <div id="ui">
-        <b style="letter-spacing: 1px;">ROBOTIC INTERFACE V2</b><br>
-        <small style="color: #666;">PRECISIÓN: ALTA (FILTRADA)</small>
-        <div class="bar"><div id="conf-bar" class="fill"></div></div>
+    <div id="debug">
+        SISTEMA DE ANCLAJE BIOMECÁNICO<br>
+        > MODO: PERSISTENCIA ACTIVA<br>
+        > STATUS: <span id="sync">ESTABILIZANDO...</span>
     </div>
     <video id="webcam" autoplay playsinline></video>
 
@@ -25,101 +23,99 @@
 
     <script>
         const videoElement = document.getElementById('webcam');
-        const confBar = document.getElementById('conf-bar');
+        const syncLabel = document.getElementById('sync');
 
-        // --- ESCENA Y LUCES ---
+        // --- MOTOR RENDER ---
         const scene = new THREE.Scene();
-        const camera3D = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        const camera3D = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        scene.add(new THREE.AmbientLight(0x404040, 2));
-        const sun = new THREE.DirectionalLight(0xffffff, 1);
-        sun.position.set(5, 10, 7.5);
-        scene.add(sun);
+        const light = new THREE.PointLight(0xffffff, 1, 100);
+        light.position.set(0, 5, 5);
+        scene.add(light, new THREE.AmbientLight(0x404040, 2));
 
-        // --- MATERIALES ---
-        const matRobot = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.2 });
-        const matJoint = new THREE.MeshStandardMaterial({ color: 0x00d2ff, emissive: 0x00d2ff, emissiveIntensity: 0.5 });
+        // --- CONSTRUCCIÓN DEL ROBOT ANCLADO ---
+        const matCuerpo = new THREE.MeshPhongMaterial({ color: 0x222222 });
+        const matArtic = new THREE.MeshPhongMaterial({ color: 0x00d2ff, emissive: 0x00d2ff, emissiveIntensity: 0.4 });
 
-        // --- CONSTRUCCIÓN DEL ESQUELETO RÍGIDO ---
-        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.3), matRobot);
-        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.25), matRobot);
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.2), matCuerpo);
+        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.35, 0.25), matCuerpo);
         scene.add(torso, cabeza);
 
-        function crearBrazo(lado) {
+        function construirBrazo(lado) {
             const hombro = new THREE.Group();
-            hombro.position.set(lado * 0.35, 0.3, 0);
+            hombro.position.set(lado * 0.35, 0.35, 0);
             
-            const superior = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.4), matRobot);
-            superior.position.y = -0.2;
+            const superior = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.45), matCuerpo);
+            superior.position.y = -0.225;
             
             const codo = new THREE.Group();
-            codo.position.y = -0.4;
+            codo.position.y = -0.45;
             
-            const inferior = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.4), matRobot);
-            inferior.position.y = -0.2;
+            const inferior = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.45), matCuerpo);
+            inferior.position.y = -0.225;
 
-            const pinza = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), matJoint);
-            pinza.position.y = -0.4;
+            const mano = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 16), matArtic);
+            mano.position.y = -0.45;
 
-            codo.add(inferior, pinza);
+            codo.add(inferior, mano);
             hombro.add(superior, codo);
             torso.add(hombro);
 
-            return { hombro, codo, pinza };
+            return { hombro, codo, mano };
         }
 
-        const brazoD = crearBrazo(-1);
-        const brazoI = crearBrazo(1);
-
+        const brazoD = construirBrazo(-1);
+        const brazoI = construirBrazo(1);
         camera3D.position.z = 4;
 
-        // --- FILTRO DE ESTABILIZACIÓN ---
-        const suavizado = 0.15;
-        const historial = {};
+        // --- SISTEMA DE PERSISTENCIA (Para que no desaparezca) ---
+        const buffer = {};
+        const getSmooth = (id, target, vis) => {
+            if (!buffer[id]) buffer[id] = { pos: new THREE.Vector3().copy(target), v: 0 };
+            // Si la visibilidad es baja, reducimos la velocidad de movimiento pero NO lo borramos
+            let factor = vis > 0.5 ? 0.2 : 0.02; 
+            buffer[id].pos.lerp(target, factor);
+            return buffer[id].pos;
+        };
 
-        function filtrar(id, vec) {
-            if (!historial[id]) historial[id] = new THREE.Vector3().copy(vec);
-            // Si el movimiento es minúsculo, no actualizamos (Deadzone)
-            if (historial[id].distanceTo(vec) > 0.01) {
-                historial[id].lerp(vec, suavizado);
-            }
-            return historial[id];
-        }
-
-        // --- TRACKING ---
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
 
         holistic.onResults((res) => {
-            if (!res.poseLandmarks) return;
+            if (!res.poseLandmarks) {
+                syncLabel.innerText = "BUSCANDO...";
+                return;
+            }
+            syncLabel.innerText = "SINCRONIZADO";
             const p = res.poseLandmarks;
-            confBar.style.width = (p[0].visibility * 100) + "%";
 
-            const to3D = (pt) => new THREE.Vector3((pt.x - 0.5) * -4, (pt.y - 0.5) * -4, pt.z * -2);
+            const toV = (pt) => new THREE.Vector3((pt.x - 0.5) * -4, (pt.y - 0.5) * -4, pt.z * -2);
 
-            // Mover Torso y Cabeza con suavidad
-            const n = filtrar('n', to3D(p[0]));
-            cabeza.position.set(n.x, n.y + 0.3, n.z);
-            torso.position.set(n.x, n.y - 0.5, n.z);
+            // Torso y Cabeza persistentes
+            const nPos = getSmooth('n', toV(p[0]), p[0].visibility);
+            cabeza.position.set(nPos.x, nPos.y + 0.3, nPos.z);
+            torso.position.set(nPos.x, nPos.y - 0.5, nPos.z);
 
-            // Actualizar Brazos usando Vectores de Dirección
-            actualizarArticulacion(brazoD, to3D(p[11]), to3D(p[13]), to3D(p[15]));
-            actualizarArticulacion(brazoI, to3D(p[12]), to3D(p[14]), to3D(p[16]));
+            // Brazos Conectados (IK Simple)
+            resolverBrazo(brazoD, toV(p[11]), toV(p[13]), toV(p[15]), p[15].visibility);
+            resolverBrazo(brazoI, toV(p[12]), toV(p[14]), toV(p[16]), p[16].visibility);
         });
 
-        function actualizarArticulacion(brazo, h, c, m) {
+        function resolverBrazo(brazo, h, c, m, vis) {
             // Dirección Hombro -> Codo
             const dirSup = new THREE.Vector3().subVectors(c, h).normalize();
             brazo.hombro.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dirSup);
 
-            // Dirección Codo -> Muñeca (Local al hombro)
+            // Dirección Codo -> Mano
             const dirInf = new THREE.Vector3().subVectors(m, c).normalize();
-            const localDir = dirInf.applyQuaternion(brazo.hombro.quaternion.clone().invert());
-            brazo.codo.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), localDir);
+            const localInf = dirInf.clone().applyQuaternion(brazo.hombro.quaternion.clone().invert());
+            brazo.codo.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), localInf);
+            
+            // Efecto Visual: Si saludas o haces pulgar arriba, la mano brilla más
+            brazo.mano.material.emissiveIntensity = vis > 0.8 ? 1.0 : 0.4;
         }
 
         const camera = new Camera(videoElement, {
