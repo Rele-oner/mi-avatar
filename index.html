@@ -1,19 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Avatar Pro - Estabilidad Máxima</title>
+    <title>Avatar - Modo Depuración Total</title>
     <style>
         body { margin: 0; background-color: #00ff00; overflow: hidden; }
-        #webcam { position: absolute; bottom: 10px; right: 10px; width: 140px; transform: scaleX(-1); border: 2px solid #00ff00; border-radius: 8px; opacity: 0.4; }
-        #status { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.85); padding: 12px; font-family: sans-serif; border-radius: 10px; border-left: 5px solid #ff4757; }
-        .btn-reset { padding: 10px 15px; background: #2f3542; color: white; border: 1px solid #57606f; border-radius: 5px; cursor: pointer; margin-top: 5px; font-weight: bold; }
+        #webcam { position: absolute; bottom: 10px; right: 10px; width: 200px; transform: scaleX(-1); border: 3px solid red; }
+        #status { position: absolute; top: 10px; left: 10px; color: white; background: black; padding: 10px; font-family: monospace; z-index: 100; }
     </style>
 </head>
 <body>
-    <div id="status">
-        <b>ESTADO:</b> CALIBRANDO...<br>
-        <button class="btn-reset" onclick="location.reload()">REINICIAR MOTOR</button>
-    </div>
+    <div id="status">ESTADO: INICIANDO CAPTURA DIRECTA...</div>
     <video id="webcam" autoplay playsinline></video>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
@@ -22,86 +18,72 @@
 
     <script>
         const videoElement = document.getElementById('webcam');
-        const statusText = document.getElementById('status');
+        const status = document.getElementById('status');
 
-        // ESCENA 3D MEJORADA
         const scene = new THREE.Scene();
-        const camera3D = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        const camera3D = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
         const material = new THREE.MeshNormalMaterial();
-        const avatar = new THREE.Group();
+        
+        // Avatar simplificado para evitar errores de jerarquía
+        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.3), material);
+        const tronco = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.2), material);
+        tronco.position.y = -0.7;
+        
+        const brazoD = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.8), material);
+        const brazoI = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.8), material);
 
-        // Construcción robusta
-        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.25), material);
-        const tronco = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.2), material);
-        tronco.position.y = -0.6;
-        avatar.add(cabeza, tronco);
-
-        function crearMiembro(x) {
-            const hombro = new THREE.Group();
-            hombro.position.set(x, -0.3, 0);
-            const sup = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.4), material);
-            sup.geometry.translate(0, -0.2, 0);
-            const codo = new THREE.Group();
-            codo.position.y = -0.4;
-            const inf = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.02, 0.4), material);
-            inf.geometry.translate(0, -0.2, 0);
-            const mano = new THREE.Group();
-            mano.position.y = -0.4;
-            codo.add(inf, mano);
-            hombro.add(sup, codo);
-            return { hombro, codo, mano };
-        }
-
-        const bDer = crearMiembro(-0.3);
-        const bIzq = crearMiembro(0.3);
-        avatar.add(bDer.hombro, bIzq.hombro);
-        scene.add(avatar);
-        camera3D.position.set(0, -0.4, 2.8);
-
-        // FILTRO DE SUAVIZADO (LERP)
-        const suavizar = (actual, objetivo, factor) => THREE.MathUtils.lerp(actual, objetivo, factor);
+        scene.add(cabeza, tronco, brazoD, brazoI);
+        camera3D.position.z = 3;
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+        
+        // CONFIGURACIÓN AGRESIVA
+        holistic.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: false, // Desactivamos suavizado para ver el movimiento real
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
 
         holistic.onResults((res) => {
-            if (res.faceLandmarks) {
-                statusText.innerHTML = "<b>SISTEMA:</b> CONECTADO<br><small>Pose-T para mejor precisión</small>";
-                const n = res.faceLandmarks[1];
-                cabeza.rotation.y = suavizar(cabeza.rotation.y, (n.x - 0.5) * -1.2, 0.1);
-                cabeza.rotation.x = suavizar(cabeza.rotation.x, (n.y - 0.5) * 1.2, 0.1);
+            if (!res.poseLandmarks) {
+                status.innerText = "ERROR: NO TE VEO. ALÉJATE DE LA CÁMARA";
+                return;
+            }
+            status.innerText = "TRACKING: RECIBIENDO COORDENADAS";
+
+            // MOVIMIENTO DIRECTO (Sin rotaciones raras)
+            const d = res.poseLandmarks;
+
+            // Cabeza
+            cabeza.position.x = (d[0].x - 0.5) * -3;
+            cabeza.position.y = (d[0].y - 0.5) * -3;
+
+            // Brazo Derecho (Tu izquierda)
+            if (d[13] && d[15]) {
+                brazoD.position.x = (d[13].x - 0.5) * -3;
+                brazoD.position.y = (d[13].y - 0.5) * -3;
+                // Apuntar el brazo hacia la muñeca
+                brazoD.lookAt((d[15].x - 0.5) * -3, (d[15].y - 0.5) * -3, 0);
+                brazoD.rotation.x += Math.PI / 2;
             }
 
-            if (res.poseLandmarks) {
-                controlarBrazo(res.poseLandmarks[11], res.poseLandmarks[13], res.poseLandmarks[15], bDer, -1);
-                controlarBrazo(res.poseLandmarks[12], res.poseLandmarks[14], res.poseLandmarks[16], bIzq, 1);
+            // Brazo Izquierdo (Tu derecha)
+            if (d[14] && d[16]) {
+                brazoI.position.x = (d[14].x - 0.5) * -3;
+                brazoI.position.y = (d[14].y - 0.5) * -3;
+                brazoI.lookAt((d[16].x - 0.5) * -3, (d[16].y - 0.5) * -3, 0);
+                brazoI.rotation.x += Math.PI / 2;
             }
         });
 
-        function controlarBrazo(h, c, m, obj, lado) {
-            // Solo movemos si la confianza es alta
-            if (h.visibility > 0.7 && c.visibility > 0.7) {
-                const angH = Math.atan2(c.y - h.y, (c.x - h.x) * lado) + Math.PI/2;
-                obj.hombro.rotation.z = suavizar(obj.hombro.rotation.z, angH * lado, 0.15);
-                
-                const angC = Math.atan2(m.y - c.y, (m.x - c.x) * lado) - angH + Math.PI/2;
-                // Limitador físico del codo (no permitir ángulos imposibles)
-                const angCLimitado = Math.max(-2, Math.min(2, angC));
-                obj.codo.rotation.z = suavizar(obj.codo.rotation.z, angCLimitado * lado, 0.15);
-            } else {
-                // Posición de reposo si se pierde el tracking
-                obj.hombro.rotation.z = suavizar(obj.hombro.rotation.z, 0.2 * -lado, 0.05);
-                obj.codo.rotation.z = suavizar(obj.codo.rotation.z, 0, 0.05);
-            }
-        }
-
         const camera = new Camera(videoElement, {
             onFrame: async () => { await holistic.send({image: videoElement}); },
-            width: 1280, height: 720
+            width: 640, height: 480
         });
         camera.start();
 
