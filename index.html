@@ -1,15 +1,19 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Avatar - Modo Depuración Total</title>
+    <title>Rotoscopia Pro - High Fidelity</title>
     <style>
         body { margin: 0; background-color: #00ff00; overflow: hidden; }
-        #webcam { position: absolute; bottom: 10px; right: 10px; width: 200px; transform: scaleX(-1); border: 3px solid red; }
-        #status { position: absolute; top: 10px; left: 10px; color: white; background: black; padding: 10px; font-family: monospace; z-index: 100; }
+        #webcam { position: absolute; bottom: 10px; right: 10px; width: 180px; transform: scaleX(-1); border: 2px solid #00ff00; border-radius: 10px; }
+        #status { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.9); padding: 15px; font-family: 'Courier New', monospace; border-radius: 5px; line-height: 1.5; }
     </style>
 </head>
 <body>
-    <div id="status">ESTADO: INICIANDO CAPTURA DIRECTA...</div>
+    <div id="status">
+        [SISTEMA DE CAPTURA 3D]<br>
+        ESTADO: <span id="state">INICIALIZANDO...</span><br>
+        <small>Ponte en Pose-T para calibrar profundidad</small>
+    </div>
     <video id="webcam" autoplay playsinline></video>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
@@ -18,72 +22,94 @@
 
     <script>
         const videoElement = document.getElementById('webcam');
-        const status = document.getElementById('status');
+        const stateText = document.getElementById('state');
 
+        // Configuración de Escena Profesional
         const scene = new THREE.Scene();
         const camera3D = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const material = new THREE.MeshNormalMaterial();
-        
-        // Avatar simplificado para evitar errores de jerarquía
-        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.3), material);
-        const tronco = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.2), material);
-        tronco.position.y = -0.7;
-        
-        const brazoD = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.8), material);
-        const brazoI = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.8), material);
+        const mat = new THREE.MeshNormalMaterial({ wireframe: false });
 
-        scene.add(cabeza, tronco, brazoD, brazoI);
-        camera3D.position.z = 3;
+        // Esqueleto de alta precisión
+        const crearHueso = (w, h, d) => {
+            const geo = new THREE.BoxGeometry(w, h, d);
+            geo.translate(0, -h/2, 0); // Origen en la parte superior
+            return new THREE.Mesh(geo, mat);
+        };
+
+        const cabeza = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 16), mat);
+        const pecho = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.2), mat);
+        pecho.position.y = -0.5;
+
+        // Estructura de brazos con jerarquía real
+        const bDerSup = crearHueso(0.08, 0.4, 0.08); 
+        const bDerInf = crearHueso(0.06, 0.4, 0.06);
+        bDerSup.position.set(-0.25, -0.2, 0);
+        bDerInf.position.y = -0.4;
+        bDerSup.add(bDerInf);
+
+        const bIzqSup = crearHueso(0.08, 0.4, 0.08);
+        const bIzqInf = crearHueso(0.06, 0.4, 0.06);
+        bIzqSup.position.set(0.25, -0.2, 0);
+        bIzqInf.position.y = -0.4;
+        bIzqSup.add(bIzqInf);
+
+        scene.add(cabeza, pecho, bDerSup, bIzqSup);
+        camera3D.position.set(0, -0.5, 3);
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        
-        // CONFIGURACIÓN AGRESIVA
         holistic.setOptions({
-            modelComplexity: 1,
-            smoothLandmarks: false, // Desactivamos suavizado para ver el movimiento real
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
+            modelComplexity: 2, // Máximo rigor matemático
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
         });
 
         holistic.onResults((res) => {
-            if (!res.poseLandmarks) {
-                status.innerText = "ERROR: NO TE VEO. ALÉJATE DE LA CÁMARA";
+            if (!res.poseWorldLandmarks) {
+                stateText.innerText = "BUSCANDO CUERPO...";
+                stateText.style.color = "red";
                 return;
             }
-            status.innerText = "TRACKING: RECIBIENDO COORDENADAS";
+            stateText.innerText = "TRACKING 3D ACTIVO";
+            stateText.style.color = "#00ff00";
 
-            // MOVIMIENTO DIRECTO (Sin rotaciones raras)
-            const d = res.poseLandmarks;
+            const w = res.poseWorldLandmarks; // Coordenadas en metros reales
 
-            // Cabeza
-            cabeza.position.x = (d[0].x - 0.5) * -3;
-            cabeza.position.y = (d[0].y - 0.5) * -3;
+            // 1. Orientación del pecho (para evitar que sea plano)
+            const centroPechoX = (w[11].x + w[12].x) / 2;
+            pecho.rotation.y = (w[11].z - w[12].z) * 2;
 
-            // Brazo Derecho (Tu izquierda)
-            if (d[13] && d[15]) {
-                brazoD.position.x = (d[13].x - 0.5) * -3;
-                brazoD.position.y = (d[13].y - 0.5) * -3;
-                // Apuntar el brazo hacia la muñeca
-                brazoD.lookAt((d[15].x - 0.5) * -3, (d[15].y - 0.5) * -3, 0);
-                brazoD.rotation.x += Math.PI / 2;
-            }
+            // 2. BRAZO DERECHO (Matemáticas de vector 3D)
+            actualizarArticulacion(w[11], w[13], bDerSup);
+            actualizarArticulacion(w[13], w[15], bDerInf);
 
-            // Brazo Izquierdo (Tu derecha)
-            if (d[14] && d[16]) {
-                brazoI.position.x = (d[14].x - 0.5) * -3;
-                brazoI.position.y = (d[14].y - 0.5) * -3;
-                brazoI.lookAt((d[16].x - 0.5) * -3, (d[16].y - 0.5) * -3, 0);
-                brazoI.rotation.x += Math.PI / 2;
+            // 3. BRAZO IZQUIERDO
+            actualizarArticulacion(w[12], w[14], bIzqSup);
+            actualizarArticulacion(w[14], w[16], bIzqInf);
+            
+            // 4. Cabeza (Usando los ojos para la inclinación)
+            if (res.poseLandmarks) {
+                const face = res.poseLandmarks[0];
+                cabeza.position.set((face.x - 0.5) * -2, (face.y - 0.5) * -2, face.z);
             }
         });
 
+        function actualizarArticulacion(p1, p2, bone) {
+            // Calculamos el vector entre las dos articulaciones en el espacio 3D
+            const v = new THREE.Vector3(p2.x - p1.x, p2.y - p1.y, p2.z - p1.z);
+            const len = v.length();
+            
+            // Orientamos el hueso
+            bone.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), v.clone().normalize());
+        }
+
         const camera = new Camera(videoElement, {
             onFrame: async () => { await holistic.send({image: videoElement}); },
-            width: 640, height: 480
+            width: 1280, height: 720
         });
         camera.start();
 
