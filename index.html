@@ -2,10 +2,10 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Croma Avatar - Fixed Scale V8</title>
+    <title>Rotoscopia Pro - Persistencia Total</title>
     <style>
         body { margin: 0; background-color: #00ff00; overflow: hidden; }
-        #webcam { position: absolute; bottom: 10px; right: 10px; width: 200px; transform: scaleX(-1); border-radius: 8px; border: 1px solid white; z-index: 100; }
+        #webcam { position: absolute; bottom: 10px; right: 10px; width: 220px; transform: scaleX(-1); border: 2px solid white; border-radius: 10px; z-index: 10; }
     </style>
 </head>
 <body>
@@ -18,74 +18,92 @@
     <script>
         const videoElement = document.getElementById('webcam');
 
-        // --- RENDER CON BLOQUEO DE CÁMARA ---
+        // --- MOTOR 3D ESTÁTICO ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x00ff00); // Croma estable
+        scene.background = new THREE.Color(0x00ff00);
 
         const camera3D = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera3D.position.set(0, 0, 4); // Distancia fija para evitar zooms raros
+        camera3D.lookAt(0, 0, 0);
+
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // Fijamos la cámara para evitar el efecto "zoom" que viste
-        camera3D.position.set(0, 0, 4);
-        camera3D.lookAt(0, 0, 0);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 5, 5);
+        scene.add(dirLight);
 
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(0, 5, 10);
-        scene.add(light, new THREE.AmbientLight(0xffffff, 0.5));
+        // --- MODELO CON JERARQUÍA ---
+        const matBody = new THREE.MeshPhongMaterial({ color: 0x1a1a1a });
+        const matJoint = new THREE.MeshPhongMaterial({ color: 0x00d2ff, emissive: 0x00d2ff, emissiveIntensity: 0.5 });
 
-        // --- MODELO ROBÓTICO ---
-        const matRobot = new THREE.MeshPhongMaterial({ color: 0x111111 });
-        const matJoint = new THREE.MeshPhongMaterial({ color: 0x00d2ff, emissive: 0x00d2ff });
-
-        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.2), matRobot);
-        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.35, 0.25), matRobot);
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.2), matBody);
+        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.35, 0.25), matBody);
         scene.add(torso, cabeza);
 
-        function crearExtremidad(lado) {
+        function crearBrazo(lado) {
             const hombro = new THREE.Group();
             hombro.position.set(lado * 0.35, 0.3, 0);
-            const sup = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.4), matRobot);
-            sup.position.y = -0.2;
+            const sup = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.45), matBody);
+            sup.position.y = -0.225;
             const codo = new THREE.Group();
-            codo.position.y = -0.4;
-            const inf = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.4), matRobot);
-            inf.position.y = -0.2;
-            const mano = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 16), matJoint);
-            mano.position.y = -0.4;
+            codo.position.y = -0.45;
+            const inf = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.45), matBody);
+            inf.position.y = -0.225;
+            const mano = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), matJoint);
+            mano.position.y = -0.45;
             codo.add(inf, mano); hombro.add(sup, codo); torso.add(hombro);
             return { hombro, codo };
         }
 
-        const brazoD = crearExtremidad(-1);
-        const brazoI = crearExtremidad(1);
+        const brazoD = crearBrazo(-1);
+        const brazoI = crearBrazo(1);
 
-        // --- LÓGICA DE SEGUIMIENTO FIJA ---
+        // --- LÓGICA DE TRACKING ---
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
 
         holistic.onResults((res) => {
             if (!res.poseLandmarks) return;
             const p = res.poseLandmarks;
+            const f = res.faceLandmarks;
 
-            // Convertir coordenadas con escala estática (el 0.5 centra el avatar)
+            // Normalización de coordenadas (Mantenemos al avatar en el centro)
             const toV = (pt) => new THREE.Vector3((pt.x - 0.5) * -3, (pt.y - 0.5) * -3, 0);
 
-            // Cabeza y Torso se mueven pero NO se acercan a la cámara
-            const nariz = toV(p[0]);
-            cabeza.position.set(nariz.x, nariz.y + 0.3, 0);
-            torso.position.set(nariz.x, nariz.y - 0.4, 0);
+            // 1. Cabeza: Seguimiento de orientación
+            if (f) {
+                const center = f[1]; // Nariz
+                const top = f[10];   // Frente
+                const vHead = new THREE.Vector3(top.x - center.x, top.y - center.y, top.z - center.z).normalize();
+                cabeza.lookAt(cabeza.position.clone().add(vHead));
+                cabeza.position.set((p[0].x - 0.5) * -3, (p[0].y - 0.5) * -3 + 0.3, 0);
+            }
 
-            // Brazos: Solo rotan, nunca se estiran fuera de su anclaje
-            resolverIK(brazoD, toV(p[11]), toV(p[13]), toV(p[15]));
-            resolverIK(brazoI, toV(p[12]), toV(p[14]), toV(p[16]));
+            // 2. Torso fijo
+            torso.position.set((p[11].x + p[12].x)/2 - 0.5, (p[11].y + p[12].y)/2 - 0.5, 0).multiplyScalar(-3);
+
+            // 3. Brazos con persistencia (No se borran si bajas el brazo)
+            actualizarBrazo(brazoD, p[11], p[13], p[15]);
+            actualizarBrazo(brazoI, p[12], p[14], p[16]);
         });
 
-        function resolverIK(limb, h, c, m) {
-            const dirSup = new THREE.Vector3().subVectors(c, h).normalize();
+        function actualizarBrazo(limb, h, c, w) {
+            // Solo actualizamos si la cámara tiene una confianza mínima
+            if (h.visibility < 0.5 || c.visibility < 0.5) return; 
+
+            const vH = new THREE.Vector3(h.x, h.y, h.z);
+            const vC = new THREE.Vector3(c.x, c.y, c.z);
+            const vW = new THREE.Vector3(w.x, w.y, w.z);
+
+            // Dirección Brazo Superior
+            const dirSup = new THREE.Vector3().subVectors(vC, vH).normalize();
             limb.hombro.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dirSup);
-            const dirInf = new THREE.Vector3().subVectors(m, c).normalize();
+
+            // Dirección Antebrazo (Local)
+            const dirInf = new THREE.Vector3().subVectors(vW, vC).normalize();
             const localDir = dirInf.applyQuaternion(limb.hombro.quaternion.clone().invert());
             limb.codo.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), localDir);
         }
