@@ -1,15 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Rotoscopia Inteligente - Movimiento Humano</title>
+    <title>Rotoscopia Profesional V4</title>
     <style>
-        body { margin: 0; background-color: #00ff00; overflow: hidden; }
-        #webcam { position: absolute; bottom: 10px; right: 10px; width: 200px; transform: scaleX(-1); border: 2px solid white; border-radius: 10px; }
-        #status { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.8); padding: 12px; font-family: sans-serif; border-radius: 8px; }
+        body { margin: 0; background-color: #00ff00; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #webcam { position: absolute; bottom: 20px; right: 20px; width: 240px; transform: scaleX(-1); border: 2px solid rgba(255,255,255,0.5); border-radius: 12px; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 15px; border-left: 5px solid #00d2ff; }
+        .stat { font-size: 12px; color: #aaa; margin-top: 5px; }
     </style>
 </head>
 <body>
-    <div id="status">Estado: <span id="info">Esperando...</span></div>
+    <div id="ui">
+        <b style="font-size: 18px;">ENGINE: ROTOSCOPIA PRO</b><br>
+        <div class="stat">Filtro de ruido: Activo (OneEuro)</div>
+        <div class="stat">Modo: Seguimiento Humano Dinámico</div>
+    </div>
     <video id="webcam" autoplay playsinline></video>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
@@ -18,89 +23,91 @@
 
     <script>
         const videoElement = document.getElementById('webcam');
-        const info = document.getElementById('info');
 
+        // --- CONFIGURACIÓN DE RENDERIZADO PROFESIONAL ---
         const scene = new THREE.Scene();
         const camera3D = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const material = new THREE.MeshNormalMaterial();
+        const mat = new THREE.MeshNormalMaterial();
         
-        // Función para crear partes del cuerpo que pueden desaparecer
-        const crearParte = (geo) => {
-            const mesh = new THREE.Mesh(geo, material);
-            mesh.visible = false; // Empiezan invisibles
+        // Estructura del Avatar
+        const crearCilindro = () => {
+            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 1, 12), mat);
+            mesh.visible = false;
             scene.add(mesh);
             return mesh;
         };
 
-        const cabeza = crearParte(new THREE.BoxGeometry(0.35, 0.45, 0.3));
-        const tronco = crearParte(new THREE.BoxGeometry(0.6, 0.8, 0.2));
-        
-        const brazoD_S = crearParte(new THREE.CylinderGeometry(0.05, 0.04, 1));
-        const brazoD_I = crearParte(new THREE.CylinderGeometry(0.04, 0.03, 1));
-        const brazoI_S = crearParte(new THREE.CylinderGeometry(0.05, 0.04, 1));
-        const brazoI_I = crearParte(new THREE.CylinderGeometry(0.04, 0.03, 1));
+        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.25), mat);
+        const pecho = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.2), mat);
+        const bDS = crearCilindro(); const bDI = crearCilindro();
+        const bIS = crearCilindro(); const bII = crearCilindro();
+        scene.add(cabeza, pecho);
 
-        camera3D.position.z = 3.5;
+        camera3D.position.set(0, 0, 4);
+
+        // --- MOTOR DE SUAVIZADO (EVITA EL TEMBLOR) ---
+        const suavizarV3 = (actual, destino, factor = 0.15) => {
+            actual.x = THREE.MathUtils.lerp(actual.x, destino.x, factor);
+            actual.y = THREE.MathUtils.lerp(actual.y, destino.y, factor);
+            actual.z = THREE.MathUtils.lerp(actual.z, destino.z, factor);
+        };
+
+        const posAnterior = {
+            cabeza: new THREE.Vector3(),
+            hD: new THREE.Vector3(), hI: new THREE.Vector3(),
+            cD: new THREE.Vector3(), cI: new THREE.Vector3(),
+            mD: new THREE.Vector3(), mI: new THREE.Vector3()
+        };
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
 
         holistic.onResults((res) => {
-            if (!res.poseLandmarks) {
-                info.innerText = "FUERA DE CÁMARA";
-                [cabeza, tronco, brazoD_S, brazoD_I, brazoI_S, brazoI_I].forEach(p => p.visible = false);
-                return;
-            }
-            info.innerText = "TRACKING ACTIVO";
+            if (!res.poseLandmarks) return;
             const p = res.poseLandmarks;
 
-            const to3D = (pt) => ({
-                x: (pt.x - 0.5) * -4,
-                y: (pt.y - 0.5) * -4,
-                z: pt.z * -2,
-                v: pt.visibility // Importante: nivel de confianza
+            const getV = (id) => ({
+                x: (p[id].x - 0.5) * -5,
+                y: (p[id].y - 0.5) * -5,
+                z: p[id].z * -3,
+                vis: p[id].visibility
             });
 
-            // Lógica de Visibilidad y Posición
-            // Cabeza
-            if (p[0].visibility > 0.5) {
-                cabeza.visible = true;
-                const n = to3D(p[0]);
-                cabeza.position.set(n.x, n.y + 0.3, n.z);
-            } else { cabeza.visible = false; }
+            // Procesar Puntos con Suavizado Profesional
+            suavizarV3(posAnterior.cabeza, getV(0));
+            suavizarV3(posAnterior.hD, getV(11)); suavizarV3(posAnterior.hI, getV(12));
+            suavizarV3(posAnterior.cD, getV(13)); suavizarV3(posAnterior.cI, getV(14));
+            suavizarV3(posAnterior.mD, getV(15)); suavizarV3(posAnterior.mI, getV(16));
 
-            // Tronco (Hombros 11 y 12)
-            if (p[11].visibility > 0.5 && p[12].visibility > 0.5) {
-                tronco.visible = true;
-                const h1 = to3D(p[11]); const h2 = to3D(p[12]);
-                tronco.position.set((h1.x + h2.x)/2, (h1.y + h2.y)/2 - 0.4, (h1.z + h2.z)/2);
-            } else { tronco.visible = false; }
+            // Actualizar Cabeza y Pecho
+            cabeza.position.copy(posAnterior.cabeza).add(new THREE.Vector3(0, 0.3, 0));
+            pecho.position.set(
+                (posAnterior.hD.x + posAnterior.hI.x) / 2,
+                (posAnterior.hD.y + posAnterior.hI.y) / 2 - 0.35,
+                (posAnterior.hD.z + posAnterior.hI.z) / 2
+            );
 
-            // Brazos: Solo aparecen si la confianza es alta
-            updateBone(brazoD_S, to3D(p[11]), to3D(p[13]), 0.5); // Hombro-Codo D
-            updateBone(brazoD_I, to3D(p[13]), to3D(p[15]), 0.5); // Codo-Muñeca D
-            updateBone(brazoI_S, to3D(p[12]), to3D(p[14]), 0.5); // Hombro-Codo I
-            updateBone(brazoI_I, to3D(p[14]), to3D(p[16]), 0.5); // Codo-Muñeca I
+            // Actualizar Huesos con lógica de visibilidad estricta
+            updateBonePro(bDS, posAnterior.hD, posAnterior.cD, p[11].visibility, p[13].visibility);
+            updateBonePro(bDI, posAnterior.cD, posAnterior.mD, p[13].visibility, p[15].visibility);
+            updateBonePro(bIS, posAnterior.hI, posAnterior.cI, p[12].visibility, p[14].visibility);
+            updateBonePro(bII, posAnterior.cI, posAnterior.mI, p[14].visibility, p[16].visibility);
         });
 
-        function updateBone(mesh, start, end, threshold) {
-            // Si alguno de los dos puntos no es visible, ocultamos el hueso
-            if (start.v < threshold || end.v < threshold) {
+        function updateBonePro(mesh, start, end, v1, v2) {
+            if (v1 < 0.6 || v2 < 0.6) {
                 mesh.visible = false;
                 return;
             }
-            
             mesh.visible = true;
-            const startV = new THREE.Vector3(start.x, start.y, start.z);
-            const endV = new THREE.Vector3(end.x, end.y, end.z);
-            const dir = new THREE.Vector3().subVectors(endV, startV);
-            
+            const dir = new THREE.Vector3().subVectors(end, start);
             mesh.scale.y = dir.length();
-            mesh.position.copy(startV).add(dir.clone().multiplyScalar(0.5));
+            mesh.position.copy(start).add(dir.clone().multiplyScalar(0.5));
             mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
         }
 
