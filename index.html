@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Mi Avatar - Sistema de Cuerpo Completo</title>
+    <title>Mi Avatar - Corrección de Brazos</title>
     <style>
         body { margin: 0; background-color: #00ff00; overflow: hidden; }
-        #webcam { position: absolute; bottom: 10px; right: 10px; width: 160px; transform: scaleX(-1); border: 2px solid white; border-radius: 5px; opacity: 0.8; }
+        #webcam { position: absolute; bottom: 10px; right: 10px; width: 160px; transform: scaleX(-1); border: 2px solid white; border-radius: 5px; }
         #status { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.5); padding: 8px; font-family: sans-serif; }
     </style>
 </head>
 <body>
-    <div id="status">Iniciando Tracking...</div>
+    <div id="status">Calibrando brazos...</div>
     <video id="webcam" autoplay playsinline></video>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
@@ -20,7 +20,6 @@
         const videoElement = document.getElementById('webcam');
         const status = document.getElementById('status');
 
-        // --- ESCENA 3D ---
         const scene = new THREE.Scene();
         const camera3D = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -28,67 +27,58 @@
         document.body.appendChild(renderer.domElement);
 
         const material = new THREE.MeshNormalMaterial();
-        
-        // GRUPO AVATAR (Para moverlo todo junto)
         const avatar = new THREE.Group();
         
         // Cabeza
         const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.3), material);
         avatar.add(cabeza);
 
-        // Ojos
-        const ojoGeo = new THREE.SphereGeometry(0.04, 8, 8);
-        const ojoI = new THREE.Mesh(ojoGeo, new THREE.MeshBasicMaterial({color: 0x000000}));
-        ojoI.position.set(-0.12, 0.05, 0.15);
-        const ojoD = ojoI.clone();
-        ojoD.position.x = 0.12;
-        cabeza.add(ojoI, ojoD);
-
-        // Tronco (Cuerpo)
+        // Tronco
         const tronco = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.25), material);
         tronco.position.y = -0.7;
         avatar.add(tronco);
 
-        // Brazo Derecho
+        // Brazos con pivote corregido
         const brazoGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.6);
+        brazoGeo.translate(0, -0.3, 0); // El punto de giro ahora es el extremo superior (hombro)
+
         const brazoD = new THREE.Mesh(brazoGeo, material);
-        brazoD.geometry.translate(0, -0.3, 0); // Ajustar pivote al hombro
         brazoD.position.set(-0.35, -0.4, 0);
         avatar.add(brazoD);
 
-        // Brazo Izquierdo
-        const brazoI = brazoD.clone();
-        brazoI.position.x = 0.35;
+        const brazoI = new THREE.Mesh(brazoGeo, material);
+        brazoI.position.set(0.35, -0.4, 0);
         avatar.add(brazoI);
 
         scene.add(avatar);
         camera3D.position.set(0, -0.5, 2.5);
 
-        // --- TRACKING ---
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
         holistic.setOptions({ modelComplexity: 1, refineFaceLandmarks: true });
 
         holistic.onResults((results) => {
-            status.innerText = "Tracking: RECIBIENDO DATOS";
+            status.innerText = "Tracking: ACTIVO";
             
-            // Movimiento Cabeza
             if (results.faceLandmarks) {
                 const n = results.faceLandmarks[1];
                 cabeza.rotation.y = (n.x - 0.5) * -1.5;
                 cabeza.rotation.x = (n.y - 0.5) * 1.5;
             }
 
-            // Movimiento Brazos (Pose)
             if (results.poseLandmarks) {
-                const hD = results.poseLandmarks[12]; // Hombro D
-                const cD = results.poseLandmarks[14]; // Codo D
-                const hI = results.poseLandmarks[11]; // Hombro I
-                const cI = results.poseLandmarks[13]; // Codo I
+                const hD = results.poseLandmarks[12]; 
+                const cD = results.poseLandmarks[14]; 
+                const hI = results.poseLandmarks[11]; 
+                const cI = results.poseLandmarks[13]; 
 
-                // Rotar brazo derecho según ángulo del codo
-                brazoD.rotation.z = Math.atan2(cD.y - hD.y, cD.x - hD.x) + Math.PI/2;
-                // Rotar brazo izquierdo
-                brazoI.rotation.z = Math.atan2(cI.y - hI.y, cI.x - hI.x) + Math.PI/2;
+                // MATEMÁTICAS CORREGIDAS: Invertimos el cálculo del ángulo
+                // Brazo Derecho
+                const anguloD = Math.atan2(cD.y - hD.y, cD.x - hD.x);
+                brazoD.rotation.z = anguloD - Math.PI / 2;
+
+                // Brazo Izquierdo
+                const anguloI = Math.atan2(cI.y - hI.y, cI.x - hI.x);
+                brazoI.rotation.z = anguloI - Math.PI / 2;
             }
         });
 
