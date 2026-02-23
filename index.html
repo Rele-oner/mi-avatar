@@ -1,15 +1,33 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Mi Avatar - Corrección de Brazos</title>
+    <title>Avatar Pro - Con Botón Reset</title>
     <style>
         body { margin: 0; background-color: #00ff00; overflow: hidden; }
         #webcam { position: absolute; bottom: 10px; right: 10px; width: 160px; transform: scaleX(-1); border: 2px solid white; border-radius: 5px; }
-        #status { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.5); padding: 8px; font-family: sans-serif; }
+        
+        /* Estilo del Botón de Reset */
+        #ui-container { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; gap: 10px; z-index: 100; }
+        .btn-reset { 
+            padding: 12px 20px; 
+            background: #ff4757; 
+            color: white; 
+            border: none; 
+            border-radius: 8px; 
+            font-weight: bold; 
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        .btn-reset:hover { background: #ff6b81; }
+        #status { color: white; background: rgba(0,0,0,0.5); padding: 8px; font-family: sans-serif; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <div id="status">Calibrando brazos...</div>
+    <div id="ui-container">
+        <div id="status">Sistema Listo</div>
+        <button class="btn-reset" onclick="resetPosicion()">🔄 RESETEAR POSICIÓN</button>
+    </div>
+    
     <video id="webcam" autoplay playsinline></video>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
@@ -20,6 +38,7 @@
         const videoElement = document.getElementById('webcam');
         const status = document.getElementById('status');
 
+        // --- ESCENA 3D ---
         const scene = new THREE.Scene();
         const camera3D = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -29,18 +48,15 @@
         const material = new THREE.MeshNormalMaterial();
         const avatar = new THREE.Group();
         
-        // Cabeza
         const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 0.3), material);
         avatar.add(cabeza);
 
-        // Tronco
         const tronco = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.25), material);
         tronco.position.y = -0.7;
         avatar.add(tronco);
 
-        // Brazos con pivote corregido
-        const brazoGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.6);
-        brazoGeo.translate(0, -0.3, 0); // El punto de giro ahora es el extremo superior (hombro)
+        const brazoGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.7);
+        brazoGeo.translate(0, -0.35, 0); 
 
         const brazoD = new THREE.Mesh(brazoGeo, material);
         brazoD.position.set(-0.35, -0.4, 0);
@@ -53,11 +69,33 @@
         scene.add(avatar);
         camera3D.position.set(0, -0.5, 2.5);
 
+        // --- LÓGICA DE RESET ---
+        let trackingActivo = true;
+
+        function resetPosicion() {
+            trackingActivo = false;
+            status.innerText = "RESETEANDO...";
+            
+            // Volver a posición neutra
+            cabeza.rotation.set(0, 0, 0);
+            brazoD.rotation.set(0, 0, 0);
+            brazoI.rotation.set(0, 0, 0);
+
+            // Reactivar después de 1 segundo
+            setTimeout(() => {
+                trackingActivo = true;
+                status.innerText = "Tracking: CALIBRADO";
+            }, 1000);
+        }
+
+        // --- TRACKING ---
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
         holistic.setOptions({ modelComplexity: 1, refineFaceLandmarks: true });
 
         holistic.onResults((results) => {
-            status.innerText = "Tracking: ACTIVO";
+            if (!trackingActivo) return;
+
+            status.innerText = "Tracking: EN VIVO";
             
             if (results.faceLandmarks) {
                 const n = results.faceLandmarks[1];
@@ -66,19 +104,14 @@
             }
 
             if (results.poseLandmarks) {
-                const hD = results.poseLandmarks[12]; 
-                const cD = results.poseLandmarks[14]; 
-                const hI = results.poseLandmarks[11]; 
-                const cI = results.poseLandmarks[13]; 
+                const hD = results.poseLandmarks[11]; 
+                const cD = results.poseLandmarks[13]; 
+                const hI = results.poseLandmarks[12]; 
+                const cI = results.poseLandmarks[14]; 
 
-                // MATEMÁTICAS CORREGIDAS: Invertimos el cálculo del ángulo
-                // Brazo Derecho
-                const anguloD = Math.atan2(cD.y - hD.y, cD.x - hD.x);
-                brazoD.rotation.z = anguloD - Math.PI / 2;
-
-                // Brazo Izquierdo
-                const anguloI = Math.atan2(cI.y - hI.y, cI.x - hI.x);
-                brazoI.rotation.z = anguloI - Math.PI / 2;
+                // Brazos (Con eje corregido para que se abran hacia afuera)
+                brazoD.rotation.z = Math.atan2(cD.y - hD.y, cD.x - hD.x) + Math.PI / 2;
+                brazoI.rotation.z = Math.atan2(cI.y - hI.y, cI.x - hI.x) + Math.PI / 2;
             }
         });
 
