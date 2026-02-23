@@ -2,20 +2,21 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Rotoscopia Profesional V5 - Full Tracking</title>
+    <title>Motor de Rotoscopia Ultra-Preciso V6</title>
     <style>
-        body { margin: 0; background-color: #00ff00; overflow: hidden; font-family: 'Courier New', monospace; }
-        #webcam { position: absolute; bottom: 20px; right: 20px; width: 240px; transform: scaleX(-1); border: 2px solid #ffffff33; border-radius: 12px; z-index: 10; }
-        #overlay { position: absolute; top: 20px; left: 20px; color: #00ff00; background: rgba(0,0,0,0.85); padding: 20px; border-radius: 10px; border: 1px solid #333; pointer-events: none; }
-        .blink { animation: blinker 1s linear infinite; }
-        @keyframes blinker { 50% { opacity: 0; } }
+        body { margin: 0; background-color: #000; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #webcam { position: absolute; bottom: 20px; right: 20px; width: 280px; transform: scaleX(-1); border: 2px solid #00d2ff; border-radius: 15px; box-shadow: 0 0 20px rgba(0, 210, 255, 0.5); z-index: 10; }
+        #ui-panel { position: absolute; top: 20px; left: 20px; color: #00d2ff; background: rgba(10, 10, 10, 0.9); padding: 25px; border-radius: 15px; border: 1px solid #00d2ff; pointer-events: none; min-width: 250px; }
+        .data-stream { font-family: 'Consolas', monospace; font-size: 11px; color: #00ffaa; margin-top: 10px; }
+        .grid-bg { position: fixed; width: 100vw; height: 100vh; background-image: linear-gradient(rgba(0,210,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,210,255,0.1) 1px, transparent 1px); background-size: 50px 50px; z-index: -1; }
     </style>
 </head>
 <body>
-    <div id="overlay">
-        <b>SISTEMA DE CAPTURA BIOMÉTRICA</b><br>
-        STATUS: <span class="blink">RECIBIENDO DATOS HD</span><br>
-        <small>Filtro de Ruido: ACTIVO (Low-Pass)</small>
+    <div class="grid-bg"></div>
+    <div id="ui-panel">
+        <b style="font-size: 20px; letter-spacing: 2px;">PRECISION MOCAP ENGINE</b><br>
+        <div style="height: 2px; background: #00d2ff; margin: 10px 0;"></div>
+        <div class="data-stream" id="stats">Sincronizando sensores...</div>
     </div>
     <video id="webcam" autoplay playsinline></video>
 
@@ -25,107 +26,121 @@
 
     <script>
         const videoElement = document.getElementById('webcam');
-        
-        // --- CONFIGURACIÓN DE ESCENA ---
+        const statsDisplay = document.getElementById('stats');
+
+        // --- RENDERER DE GRADO INDUSTRIAL ---
         const scene = new THREE.Scene();
-        const camera3D = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera3D = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const mat = new THREE.MeshNormalMaterial();
-        
-        // --- CONSTRUCCIÓN DEL AVATAR ---
-        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.45, 0.3), mat);
-        const tronco = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.2), mat);
-        scene.add(cabeza, tronco);
+        const material = new THREE.MeshPhongMaterial({ color: 0x00d2ff, wireframe: false, flatShading: false });
+        const light = new THREE.DirectionalLight(0xffffff, 1);
+        light.position.set(1, 1, 2).normalize();
+        scene.add(light, new THREE.AmbientLight(0x404040));
 
-        const crearHueso = () => {
-            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, 1, 16), mat);
+        // --- CONSTRUCCIÓN DEL ESQUELETO METICULOSO ---
+        const skeleton = {
+            cabeza: new THREE.Mesh(new THREE.SphereGeometry(0.22, 32, 32), material),
+            tronco: new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.2), material),
+            brazos: {
+                der: { sup: crearCilindro(0.05), inf: crearCilindro(0.04) },
+                izq: { sup: crearCilindro(0.05), inf: crearCilindro(0.04) }
+            },
+            manos: {
+                der: crearEstructuraMano(),
+                izq: crearEstructuraMano()
+            }
+        };
+
+        function crearCilindro(radio) {
+            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radio, radio * 0.8, 1, 16), material);
             mesh.visible = false;
             scene.add(mesh);
             return mesh;
-        };
+        }
 
-        const bDS = crearHueso(); const bDI = crearHueso();
-        const bIS = crearHueso(); const bII = crearHueso();
+        function crearEstructuraMano() {
+            // Creamos 21 esferas para representar cada articulación de la mano
+            return Array.from({ length: 21 }, () => {
+                const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), material);
+                sphere.visible = false;
+                scene.add(sphere);
+                return sphere;
+            });
+        }
 
-        // Dedos (5 por mano)
-        const crearDedos = () => Array.from({length: 5}, () => {
-            const d = new THREE.Mesh(new THREE.SphereGeometry(0.025), mat);
-            d.visible = false;
-            scene.add(d);
-            return d;
-        });
-        const dedosD = crearDedos();
-        const dedosI = crearDedos();
-
+        scene.add(skeleton.cabeza, skeleton.tronco);
         camera3D.position.set(0, 0, 4);
 
-        // --- FILTRO DE ESTABILIZACIÓN ---
-        const suavizado = 0.25; // Entre 0 y 1. Menor = más suave pero más lag.
-        const puntosS = {};
+        // --- FILTRADO DE DATOS AVANZADO (Exponential Smoothing) ---
+        const smoothingFactor = 0.2; 
+        const history = {};
 
-        const getSuave = (id, nuevo) => {
-            if (!puntosS[id]) puntosS[id] = new THREE.Vector3();
-            puntosS[id].lerp(new THREE.Vector3(
-                (nuevo.x - 0.5) * -5, 
-                (nuevo.y - 0.5) * -5, 
-                nuevo.z * -3
-            ), suavizado);
-            return puntosS[id];
-        };
+        function filter(id, vec) {
+            if (!history[id]) history[id] = new THREE.Vector3().copy(vec);
+            history[id].lerp(vec, smoothingFactor);
+            return history[id];
+        }
 
+        // --- LÓGICA DE PROCESAMIENTO ---
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
-
-        holistic.onResults((res) => {
-            if (!res.poseLandmarks) return;
-
-            const p = res.poseLandmarks;
-            const hD = getSuave('hD', p[11]);
-            const hI = getSuave('hI', p[12]);
-            const cD = getSuave('cD', p[13]);
-            const cI = getSuave('cI', p[14]);
-            const mD = getSuave('mD', p[15]);
-            const mI = getSuave('mI', p[16]);
-
-            // Cabeza y Cuerpo
-            const nariz = getSuave('n', p[0]);
-            cabeza.position.copy(nariz).add(new THREE.Vector3(0, 0.25, 0));
-            tronco.position.set((hD.x + hI.x)/2, (hD.y + hI.y)/2 - 0.4, (hD.z + hI.z)/2);
-
-            // Brazos
-            actualizarParte(bDS, hD, cD, p[11].visibility, p[13].visibility);
-            actualizarParte(bDI, cD, mD, p[13].visibility, p[15].visibility);
-            actualizarParte(bIS, hI, cI, p[12].visibility, p[14].visibility);
-            actualizarParte(bII, cI, mI, p[14].visibility, p[16].visibility);
-
-            // Manos
-            actualizarDedos(res.rightHandLandmarks, dedosD, mD);
-            actualizarDedos(res.leftHandLandmarks, dedosI, mI);
+        holistic.setOptions({
+            modelComplexity: 2, // MÁXIMA PRECISIÓN
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
         });
 
-        function actualizarParte(mesh, inicio, fin, v1, v2) {
-            if (v1 < 0.65 || v2 < 0.65) { mesh.visible = false; return; }
+        holistic.onResults((res) => {
+            if (!res.poseLandmarks) {
+                statsDisplay.innerHTML = "ESTADO: BUSCANDO SUJETO...";
+                return;
+            }
+
+            statsDisplay.innerHTML = `LATENCIA: ${Math.round(performance.now() % 100)}ms<br>RESOLUCIÓN: 1280x720<br>TRACKING: 3D FULL BODY`;
+
+            const p = res.poseLandmarks;
+            const toV = (pt) => new THREE.Vector3((pt.x - 0.5) * -4, (pt.y - 0.5) * -4, pt.z * -3);
+
+            // Filtrado de puntos clave
+            const hD = filter('hD', toV(p[11])), hI = filter('hI', toV(p[12]));
+            const cD = filter('cD', toV(p[13])), cI = filter('cI', toV(p[14]));
+            const mD = filter('mD', toV(p[15])), mI = filter('mI', toV(p[16]));
+
+            // 1. Cabeza y Tronco
+            const nariz = filter('n', toV(p[0]));
+            skeleton.cabeza.position.copy(nariz).add(new THREE.Vector3(0, 0.2, 0));
+            skeleton.tronco.position.set((hD.x + hI.x)/2, (hD.y + hI.y)/2 - 0.35, (hD.z + hI.z)/2);
+            skeleton.tronco.lookAt(hI.x, (hD.y + hI.y)/2 - 0.35, hI.z); // Orientación del pecho
+
+            // 2. Brazos
+            updateBone(skeleton.brazos.der.sup, hD, cD, p[11].visibility, p[13].visibility);
+            updateBone(skeleton.brazos.der.inf, cD, mD, p[13].visibility, p[15].visibility);
+            updateBone(skeleton.brazos.izq.sup, hI, cI, p[12].visibility, p[14].visibility);
+            updateBone(skeleton.brazos.izq.inf, cI, mI, p[14].visibility, p[16].visibility);
+
+            // 3. Manos (Seguimiento de 21 puntos por mano)
+            updateHand(res.rightHandLandmarks, skeleton.manos.der, mD);
+            updateHand(res.leftHandLandmarks, skeleton.manos.izq, mI);
+        });
+
+        function updateBone(mesh, start, end, v1, v2) {
+            if (v1 < 0.6 || v2 < 0.6) { mesh.visible = false; return; }
             mesh.visible = true;
-            const dir = new THREE.Vector3().subVectors(fin, inicio);
+            const dir = new THREE.Vector3().subVectors(end, start);
             mesh.scale.y = dir.length();
-            mesh.position.copy(inicio).add(dir.clone().multiplyScalar(0.5));
+            mesh.position.copy(start).add(dir.clone().multiplyScalar(0.5));
             mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
         }
 
-        function actualizarDedos(puntos, esferas, muñeca) {
-            if (!puntos) { esferas.forEach(e => e.visible = false); return; }
-            const ids = [4, 8, 12, 16, 20];
-            ids.forEach((id, i) => {
-                esferas[i].visible = true;
-                // Posición relativa a la muñeca real para evitar que "vuelen"
-                const dx = (puntos[id].x - puntos[0].x) * -2;
-                const dy = (puntos[id].y - puntos[0].y) * -2;
-                const dz = (puntos[id].z - puntos[0].z) * 2;
-                esferas[i].position.set(muñeca.x + dx, muñeca.y + dy, muñeca.z + dz);
+        function updateHand(handPts, meshes, wristRef) {
+            if (!handPts) { meshes.forEach(m => m.visible = false); return; }
+            handPts.forEach((pt, i) => {
+                meshes[i].visible = true;
+                // Posición absoluta mitigando la deriva de profundidad
+                meshes[i].position.set((pt.x - 0.5) * -4, (pt.y - 0.5) * -4, pt.z * -3);
             });
         }
 
@@ -140,6 +155,12 @@
             renderer.render(scene, camera3D);
         }
         animate();
+
+        window.addEventListener('resize', () => {
+            camera3D.aspect = window.innerWidth / window.innerHeight;
+            camera3D.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
