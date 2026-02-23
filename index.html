@@ -2,28 +2,20 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Robot Simulator - High Precision MoCap</title>
+    <title>Robot MoCap Professional Edition</title>
     <style>
-        body { margin: 0; background-color: #1a1a1a; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-        #webcam { position: absolute; bottom: 20px; right: 20px; width: 240px; transform: scaleX(-1); border: 2px solid #333; border-radius: 10px; }
-        #gui { position: absolute; top: 20px; left: 20px; color: #00d2ff; background: rgba(0,0,0,0.85); padding: 20px; border-radius: 8px; border: 1px solid #00d2ff; width: 280px; }
-        .slider-group { margin-bottom: 10px; font-size: 12px; }
-        input[type=range] { width: 100%; }
+        body { margin: 0; background-color: #050505; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #webcam { position: absolute; bottom: 20px; right: 20px; width: 220px; transform: scaleX(-1); border-radius: 12px; border: 2px solid #444; }
+        #ui { position: absolute; top: 20px; left: 20px; color: #00d2ff; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 10px; border: 1px solid #333; }
+        .bar { width: 100%; height: 4px; background: #222; margin-top: 10px; border-radius: 2px; }
+        .fill { height: 100%; background: #00d2ff; width: 0%; transition: width 0.2s; }
     </style>
 </head>
 <body>
-    <div id="gui">
-        <b style="font-size: 16px;">SISTEMA DE CALIBRACIÓN</b>
-        <div style="height: 1px; background: #333; margin: 10px 0;"></div>
-        <div class="slider-group">
-            Largo Brazo Superior: <span id="val_up">0.4</span>
-            <input type="range" id="upArmScale" min="0.2" max="0.8" step="0.01" value="0.4">
-        </div>
-        <div class="slider-group">
-            Largo Antebrazo: <span id="val_low">0.4</span>
-            <input type="range" id="lowArmScale" min="0.2" max="0.8" step="0.01" value="0.4">
-        </div>
-        <div style="font-size: 10px; color: #777;">MODO: CINEMÁTICA INVERSA ACTIVA</div>
+    <div id="ui">
+        <b style="letter-spacing: 1px;">ROBOTIC INTERFACE V2</b><br>
+        <small style="color: #666;">PRECISIÓN: ALTA (FILTRADA)</small>
+        <div class="bar"><div id="conf-bar" class="fill"></div></div>
     </div>
     <video id="webcam" autoplay playsinline></video>
 
@@ -32,117 +24,102 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        // CONFIGURACIÓN INICIAL DE PROPORCIONES
-        let config = { upArm: 0.4, lowArm: 0.4 };
+        const videoElement = document.getElementById('webcam');
+        const confBar = document.getElementById('conf-bar');
 
+        // --- ESCENA Y LUCES ---
         const scene = new THREE.Scene();
-        const camera3D = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera3D = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // Iluminación profesional para ver volúmenes
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(5, 5, 5);
-        scene.add(light, new THREE.AmbientLight(0x404040));
+        scene.add(new THREE.AmbientLight(0x404040, 2));
+        const sun = new THREE.DirectionalLight(0xffffff, 1);
+        sun.position.set(5, 10, 7.5);
+        scene.add(sun);
 
-        const matRobot = new THREE.MeshPhongMaterial({ color: 0x444444, shininess: 100 });
-        const matJoint = new THREE.MeshPhongMaterial({ color: 0x00d2ff });
+        // --- MATERIALES ---
+        const matRobot = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.2 });
+        const matJoint = new THREE.MeshStandardMaterial({ color: 0x00d2ff, emissive: 0x00d2ff, emissiveIntensity: 0.5 });
 
-        // FUNCIÓN PARA CREAR EXTREMIDADES ROBÓTICAS CON ARTICULACIONES
-        function createRobotLimb(side) {
-            const shoulder = new THREE.Group();
+        // --- CONSTRUCCIÓN DEL ESQUELETO RÍGIDO ---
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.3), matRobot);
+        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.25), matRobot);
+        scene.add(torso, cabeza);
+
+        function crearBrazo(lado) {
+            const hombro = new THREE.Group();
+            hombro.position.set(lado * 0.35, 0.3, 0);
             
-            // Hueso Superior
-            const upper = new THREE.Mesh(new THREE.BoxGeometry(0.08, config.upArm, 0.08), matRobot);
-            upper.position.y = -config.upArm / 2;
+            const superior = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.4), matRobot);
+            superior.position.y = -0.2;
             
-            const elbow = new THREE.Group();
-            elbow.position.y = -config.upArm;
+            const codo = new THREE.Group();
+            codo.position.y = -0.4;
             
-            // Hueso Inferior
-            const lower = new THREE.Mesh(new THREE.BoxGeometry(0.06, config.lowArm, 0.06), matRobot);
-            lower.position.y = -config.lowArm / 2;
+            const inferior = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.4), matRobot);
+            inferior.position.y = -0.2;
 
-            const hand = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), matJoint);
-            hand.position.y = -config.lowArm;
+            const pinza = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), matJoint);
+            pinza.position.y = -0.4;
 
-            elbow.add(lower, hand);
-            shoulder.add(upper, elbow);
-            scene.add(shoulder);
+            codo.add(inferior, pinza);
+            hombro.add(superior, codo);
+            torso.add(hombro);
 
-            return { shoulder, elbow, upper, lower, hand };
+            return { hombro, codo, pinza };
         }
 
-        const armR = createRobotLimb('R');
-        const armL = createRobotLimb('L');
-        
-        // Cuerpo Central (Tronco y Cabeza)
-        const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.2), matRobot);
-        const head = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.3, 0.2), matRobot);
-        scene.add(body, head);
+        const brazoD = crearBrazo(-1);
+        const brazoI = crearBrazo(1);
 
-        camera3D.position.set(0, 0, 3);
+        camera3D.position.z = 4;
 
-        // MOTOR DE SEGUIMIENTO
+        // --- FILTRO DE ESTABILIZACIÓN ---
+        const suavizado = 0.15;
+        const historial = {};
+
+        function filtrar(id, vec) {
+            if (!historial[id]) historial[id] = new THREE.Vector3().copy(vec);
+            // Si el movimiento es minúsculo, no actualizamos (Deadzone)
+            if (historial[id].distanceTo(vec) > 0.01) {
+                historial[id].lerp(vec, suavizado);
+            }
+            return historial[id];
+        }
+
+        // --- TRACKING ---
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
         holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
 
         holistic.onResults((res) => {
             if (!res.poseLandmarks) return;
             const p = res.poseLandmarks;
+            confBar.style.width = (p[0].visibility * 100) + "%";
 
-            const map = (id) => new THREE.Vector3((p[id].x - 0.5) * -3.5, (p[id].y - 0.5) * -3.5, p[id].z * -2);
+            const to3D = (pt) => new THREE.Vector3((pt.x - 0.5) * -4, (pt.y - 0.5) * -4, pt.z * -2);
 
-            // Posicionamiento de Hombros Reales
-            const sR = map(11); const sL = map(12);
-            const cR = map(13); const cL = map(14);
-            const wR = map(15); const wL = map(16);
+            // Mover Torso y Cabeza con suavidad
+            const n = filtrar('n', to3D(p[0]));
+            cabeza.position.set(n.x, n.y + 0.3, n.z);
+            torso.position.set(n.x, n.y - 0.5, n.z);
 
-            // Centrar Cuerpo
-            body.position.set((sR.x + sL.x)/2, (sR.y + sL.y)/2 - 0.3, (sR.z + sL.z)/2);
-            head.position.set(map(0).x, map(0).y + 0.2, map(0).z);
-
-            // Lógica de Rotación Cinemática (Apunta el hueso al siguiente punto)
-            updateLimbLogic(armR, sR, cR, wR);
-            updateLimbLogic(armL, sL, cL, wL);
+            // Actualizar Brazos usando Vectores de Dirección
+            actualizarArticulacion(brazoD, to3D(p[11]), to3D(p[13]), to3D(p[15]));
+            actualizarArticulacion(brazoI, to3D(p[12]), to3D(p[14]), to3D(p[16]));
         });
 
-        function updateLimbLogic(limb, start, mid, end) {
-            limb.shoulder.position.copy(start);
-            
-            // Orientar brazo superior al codo
-            const dirUpper = new THREE.Vector3().subVectors(mid, start).normalize();
-            limb.shoulder.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dirUpper);
+        function actualizarArticulacion(brazo, h, c, m) {
+            // Dirección Hombro -> Codo
+            const dirSup = new THREE.Vector3().subVectors(c, h).normalize();
+            brazo.hombro.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dirSup);
 
-            // Orientar antebrazo a la muñeca (localmente)
-            const dirLower = new THREE.Vector3().subVectors(end, mid).normalize();
-            const localDir = dirLower.clone().applyQuaternion(limb.shoulder.quaternion.clone().invert());
-            limb.elbow.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), localDir);
-        }
-
-        // CONTROL DE CALIBRACIÓN
-        document.getElementById('upArmScale').addEventListener('input', (e) => {
-            config.upArm = parseFloat(e.target.value);
-            document.getElementById('val_up').innerText = config.upArm;
-            actualizarGeometria();
-        });
-
-        document.getElementById('lowArmScale').addEventListener('input', (e) => {
-            config.lowArm = parseFloat(e.target.value);
-            document.getElementById('val_low').innerText = config.lowArm;
-            actualizarGeometria();
-        });
-
-        function actualizarGeometria() {
-            [armR, armL].forEach(a => {
-                a.upper.geometry = new THREE.BoxGeometry(0.08, config.upArm, 0.08);
-                a.upper.geometry.translate(0, -config.upArm / 2, 0);
-                a.elbow.position.y = -config.upArm;
-                a.lower.geometry = new THREE.BoxGeometry(0.06, config.lowArm, 0.06);
-                a.lower.geometry.translate(0, -config.lowArm / 2, 0);
-                a.hand.position.y = -config.lowArm;
-            });
+            // Dirección Codo -> Muñeca (Local al hombro)
+            const dirInf = new THREE.Vector3().subVectors(m, c).normalize();
+            const localDir = dirInf.applyQuaternion(brazo.hombro.quaternion.clone().invert());
+            brazo.codo.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), localDir);
         }
 
         const camera = new Camera(videoElement, {
