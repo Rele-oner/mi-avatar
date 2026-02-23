@@ -1,19 +1,21 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-    <title>Rotoscopia Profesional V4</title>
+    <meta charset="UTF-8">
+    <title>Rotoscopia Profesional V5 - Full Tracking</title>
     <style>
-        body { margin: 0; background-color: #00ff00; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-        #webcam { position: absolute; bottom: 20px; right: 20px; width: 240px; transform: scaleX(-1); border: 2px solid rgba(255,255,255,0.5); border-radius: 12px; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 15px; border-left: 5px solid #00d2ff; }
-        .stat { font-size: 12px; color: #aaa; margin-top: 5px; }
+        body { margin: 0; background-color: #00ff00; overflow: hidden; font-family: 'Courier New', monospace; }
+        #webcam { position: absolute; bottom: 20px; right: 20px; width: 240px; transform: scaleX(-1); border: 2px solid #ffffff33; border-radius: 12px; z-index: 10; }
+        #overlay { position: absolute; top: 20px; left: 20px; color: #00ff00; background: rgba(0,0,0,0.85); padding: 20px; border-radius: 10px; border: 1px solid #333; pointer-events: none; }
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
     </style>
 </head>
 <body>
-    <div id="ui">
-        <b style="font-size: 18px;">ENGINE: ROTOSCOPIA PRO</b><br>
-        <div class="stat">Filtro de ruido: Activo (OneEuro)</div>
-        <div class="stat">Modo: Seguimiento Humano Dinámico</div>
+    <div id="overlay">
+        <b>SISTEMA DE CAPTURA BIOMÉTRICA</b><br>
+        STATUS: <span class="blink">RECIBIENDO DATOS HD</span><br>
+        <small>Filtro de Ruido: ACTIVO (Low-Pass)</small>
     </div>
     <video id="webcam" autoplay playsinline></video>
 
@@ -23,10 +25,10 @@
 
     <script>
         const videoElement = document.getElementById('webcam');
-
-        // --- CONFIGURACIÓN DE RENDERIZADO PROFESIONAL ---
+        
+        // --- CONFIGURACIÓN DE ESCENA ---
         const scene = new THREE.Scene();
-        const camera3D = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera3D = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -34,34 +36,45 @@
 
         const mat = new THREE.MeshNormalMaterial();
         
-        // Estructura del Avatar
-        const crearCilindro = () => {
-            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 1, 12), mat);
+        // --- CONSTRUCCIÓN DEL AVATAR ---
+        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.45, 0.3), mat);
+        const tronco = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.2), mat);
+        scene.add(cabeza, tronco);
+
+        const crearHueso = () => {
+            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, 1, 16), mat);
             mesh.visible = false;
             scene.add(mesh);
             return mesh;
         };
 
-        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.25), mat);
-        const pecho = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.2), mat);
-        const bDS = crearCilindro(); const bDI = crearCilindro();
-        const bIS = crearCilindro(); const bII = crearCilindro();
-        scene.add(cabeza, pecho);
+        const bDS = crearHueso(); const bDI = crearHueso();
+        const bIS = crearHueso(); const bII = crearHueso();
+
+        // Dedos (5 por mano)
+        const crearDedos = () => Array.from({length: 5}, () => {
+            const d = new THREE.Mesh(new THREE.SphereGeometry(0.025), mat);
+            d.visible = false;
+            scene.add(d);
+            return d;
+        });
+        const dedosD = crearDedos();
+        const dedosI = crearDedos();
 
         camera3D.position.set(0, 0, 4);
 
-        // --- MOTOR DE SUAVIZADO (EVITA EL TEMBLOR) ---
-        const suavizarV3 = (actual, destino, factor = 0.15) => {
-            actual.x = THREE.MathUtils.lerp(actual.x, destino.x, factor);
-            actual.y = THREE.MathUtils.lerp(actual.y, destino.y, factor);
-            actual.z = THREE.MathUtils.lerp(actual.z, destino.z, factor);
-        };
+        // --- FILTRO DE ESTABILIZACIÓN ---
+        const suavizado = 0.25; // Entre 0 y 1. Menor = más suave pero más lag.
+        const puntosS = {};
 
-        const posAnterior = {
-            cabeza: new THREE.Vector3(),
-            hD: new THREE.Vector3(), hI: new THREE.Vector3(),
-            cD: new THREE.Vector3(), cI: new THREE.Vector3(),
-            mD: new THREE.Vector3(), mI: new THREE.Vector3()
+        const getSuave = (id, nuevo) => {
+            if (!puntosS[id]) puntosS[id] = new THREE.Vector3();
+            puntosS[id].lerp(new THREE.Vector3(
+                (nuevo.x - 0.5) * -5, 
+                (nuevo.y - 0.5) * -5, 
+                nuevo.z * -3
+            ), suavizado);
+            return puntosS[id];
         };
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
@@ -69,46 +82,51 @@
 
         holistic.onResults((res) => {
             if (!res.poseLandmarks) return;
+
             const p = res.poseLandmarks;
+            const hD = getSuave('hD', p[11]);
+            const hI = getSuave('hI', p[12]);
+            const cD = getSuave('cD', p[13]);
+            const cI = getSuave('cI', p[14]);
+            const mD = getSuave('mD', p[15]);
+            const mI = getSuave('mI', p[16]);
 
-            const getV = (id) => ({
-                x: (p[id].x - 0.5) * -5,
-                y: (p[id].y - 0.5) * -5,
-                z: p[id].z * -3,
-                vis: p[id].visibility
-            });
+            // Cabeza y Cuerpo
+            const nariz = getSuave('n', p[0]);
+            cabeza.position.copy(nariz).add(new THREE.Vector3(0, 0.25, 0));
+            tronco.position.set((hD.x + hI.x)/2, (hD.y + hI.y)/2 - 0.4, (hD.z + hI.z)/2);
 
-            // Procesar Puntos con Suavizado Profesional
-            suavizarV3(posAnterior.cabeza, getV(0));
-            suavizarV3(posAnterior.hD, getV(11)); suavizarV3(posAnterior.hI, getV(12));
-            suavizarV3(posAnterior.cD, getV(13)); suavizarV3(posAnterior.cI, getV(14));
-            suavizarV3(posAnterior.mD, getV(15)); suavizarV3(posAnterior.mI, getV(16));
+            // Brazos
+            actualizarParte(bDS, hD, cD, p[11].visibility, p[13].visibility);
+            actualizarParte(bDI, cD, mD, p[13].visibility, p[15].visibility);
+            actualizarParte(bIS, hI, cI, p[12].visibility, p[14].visibility);
+            actualizarParte(bII, cI, mI, p[14].visibility, p[16].visibility);
 
-            // Actualizar Cabeza y Pecho
-            cabeza.position.copy(posAnterior.cabeza).add(new THREE.Vector3(0, 0.3, 0));
-            pecho.position.set(
-                (posAnterior.hD.x + posAnterior.hI.x) / 2,
-                (posAnterior.hD.y + posAnterior.hI.y) / 2 - 0.35,
-                (posAnterior.hD.z + posAnterior.hI.z) / 2
-            );
-
-            // Actualizar Huesos con lógica de visibilidad estricta
-            updateBonePro(bDS, posAnterior.hD, posAnterior.cD, p[11].visibility, p[13].visibility);
-            updateBonePro(bDI, posAnterior.cD, posAnterior.mD, p[13].visibility, p[15].visibility);
-            updateBonePro(bIS, posAnterior.hI, posAnterior.cI, p[12].visibility, p[14].visibility);
-            updateBonePro(bII, posAnterior.cI, posAnterior.mI, p[14].visibility, p[16].visibility);
+            // Manos
+            actualizarDedos(res.rightHandLandmarks, dedosD, mD);
+            actualizarDedos(res.leftHandLandmarks, dedosI, mI);
         });
 
-        function updateBonePro(mesh, start, end, v1, v2) {
-            if (v1 < 0.6 || v2 < 0.6) {
-                mesh.visible = false;
-                return;
-            }
+        function actualizarParte(mesh, inicio, fin, v1, v2) {
+            if (v1 < 0.65 || v2 < 0.65) { mesh.visible = false; return; }
             mesh.visible = true;
-            const dir = new THREE.Vector3().subVectors(end, start);
+            const dir = new THREE.Vector3().subVectors(fin, inicio);
             mesh.scale.y = dir.length();
-            mesh.position.copy(start).add(dir.clone().multiplyScalar(0.5));
+            mesh.position.copy(inicio).add(dir.clone().multiplyScalar(0.5));
             mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
+        }
+
+        function actualizarDedos(puntos, esferas, muñeca) {
+            if (!puntos) { esferas.forEach(e => e.visible = false); return; }
+            const ids = [4, 8, 12, 16, 20];
+            ids.forEach((id, i) => {
+                esferas[i].visible = true;
+                // Posición relativa a la muñeca real para evitar que "vuelen"
+                const dx = (puntos[id].x - puntos[0].x) * -2;
+                const dy = (puntos[id].y - puntos[0].y) * -2;
+                const dz = (puntos[id].z - puntos[0].z) * 2;
+                esferas[i].position.set(muñeca.x + dx, muñeca.y + dy, muñeca.z + dz);
+            });
         }
 
         const camera = new Camera(videoElement, {
