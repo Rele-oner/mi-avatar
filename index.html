@@ -1,19 +1,18 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Avatar Pro - Precisión Extrema</title>
+    <title>Avatar Pro - Estabilidad Máxima</title>
     <style>
         body { margin: 0; background-color: #00ff00; overflow: hidden; }
-        #webcam { position: absolute; bottom: 10px; right: 10px; width: 160px; transform: scaleX(-1); border: 2px solid #00a8ff; border-radius: 5px; opacity: 0.6; }
-        #ui-container { position: absolute; top: 10px; left: 10px; display: flex; flex-direction: column; gap: 8px; z-index: 100; }
-        .btn-reset { padding: 12px 20px; background: #00a8ff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-family: sans-serif; }
-        #status { color: white; background: rgba(0,0,0,0.8); padding: 10px; font-family: sans-serif; border-radius: 8px; border-left: 4px solid #00ff00; font-size: 13px; }
+        #webcam { position: absolute; bottom: 10px; right: 10px; width: 140px; transform: scaleX(-1); border: 2px solid #00ff00; border-radius: 8px; opacity: 0.4; }
+        #status { position: absolute; top: 10px; left: 10px; color: white; background: rgba(0,0,0,0.85); padding: 12px; font-family: sans-serif; border-radius: 10px; border-left: 5px solid #ff4757; }
+        .btn-reset { padding: 10px 15px; background: #2f3542; color: white; border: 1px solid #57606f; border-radius: 5px; cursor: pointer; margin-top: 5px; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div id="ui-container">
-        <div id="status">Buscando Pose-T...</div>
-        <button class="btn-reset" onclick="location.reload()">🔄 RECALIBRAR SISTEMA</button>
+    <div id="status">
+        <b>ESTADO:</b> CALIBRANDO...<br>
+        <button class="btn-reset" onclick="location.reload()">REINICIAR MOTOR</button>
     </div>
     <video id="webcam" autoplay playsinline></video>
 
@@ -23,118 +22,81 @@
 
     <script>
         const videoElement = document.getElementById('webcam');
-        const status = document.getElementById('status');
+        const statusText = document.getElementById('status');
 
+        // ESCENA 3D MEJORADA
         const scene = new THREE.Scene();
         const camera3D = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        const mat = new THREE.MeshNormalMaterial();
+        const material = new THREE.MeshNormalMaterial();
         const avatar = new THREE.Group();
-        
-        // --- ESTRUCTURA ANATÓMICA ---
-        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.25), mat);
-        avatar.add(cabeza);
 
-        const tronco = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.2), mat);
+        // Construcción robusta
+        const cabeza = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.4, 0.25), material);
+        const tronco = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.2), material);
         tronco.position.y = -0.6;
-        avatar.add(tronco);
+        avatar.add(cabeza, tronco);
 
-        function crearBrazoPro() {
+        function crearMiembro(x) {
             const hombro = new THREE.Group();
-            const superior = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.035, 0.4), mat);
-            superior.geometry.translate(0, -0.2, 0);
-            
+            hombro.position.set(x, -0.3, 0);
+            const sup = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.4), material);
+            sup.geometry.translate(0, -0.2, 0);
             const codo = new THREE.Group();
             codo.position.y = -0.4;
-            const inferior = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.4), mat);
-            inferior.geometry.translate(0, -0.2, 0);
-            
+            const inf = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.02, 0.4), material);
+            inf.geometry.translate(0, -0.2, 0);
             const mano = new THREE.Group();
             mano.position.y = -0.4;
-            
-            codo.add(inferior, mano);
-            hombro.add(superior, codo);
-            
-            // 5 esferas para dedos
-            const dedos = [];
-            for(let i=0; i<5; i++) {
-                const d = new THREE.Mesh(new THREE.SphereGeometry(0.02), mat);
-                mano.add(d);
-                dedos.push(d);
-            }
-            return { hombro, codo, mano, dedos };
+            codo.add(inf, mano);
+            hombro.add(sup, codo);
+            return { hombro, codo, mano };
         }
 
-        const bDer = crearBrazoPro(); bDer.hombro.position.set(-0.3, -0.3, 0);
-        const bIzq = crearBrazoPro(); bIzq.hombro.position.set(0.3, -0.3, 0);
+        const bDer = crearMiembro(-0.3);
+        const bIzq = crearMiembro(0.3);
         avatar.add(bDer.hombro, bIzq.hombro);
-
         scene.add(avatar);
-        camera3D.position.set(0, -0.5, 2.8);
+        camera3D.position.set(0, -0.4, 2.8);
 
-        // --- TRACKING DE ALTA FIDELIDAD ---
+        // FILTRO DE SUAVIZADO (LERP)
+        const suavizar = (actual, objetivo, factor) => THREE.MathUtils.lerp(actual, objetivo, factor);
+
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({
-            modelComplexity: 2, // MÁXIMA PRECISIÓN
-            smoothLandmarks: true,
-            minDetectionConfidence: 0.65,
-            minTrackingConfidence: 0.65
-        });
+        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
 
         holistic.onResults((res) => {
-            // Rostro
             if (res.faceLandmarks) {
-                status.innerText = "SISTEMA: OK - TRACKING ACTIVO";
+                statusText.innerHTML = "<b>SISTEMA:</b> CONECTADO<br><small>Pose-T para mejor precisión</small>";
                 const n = res.faceLandmarks[1];
-                cabeza.rotation.y = THREE.MathUtils.lerp(cabeza.rotation.y, (n.x - 0.5) * -1.5, 0.2);
-                cabeza.rotation.x = THREE.MathUtils.lerp(cabeza.rotation.x, (n.y - 0.5) * 1.5, 0.2);
+                cabeza.rotation.y = suavizar(cabeza.rotation.y, (n.x - 0.5) * -1.2, 0.1);
+                cabeza.rotation.x = suavizar(cabeza.rotation.x, (n.y - 0.5) * 1.2, 0.1);
             }
 
-            // Pose y Brazos (Filtro de visibilidad)
             if (res.poseLandmarks) {
-                // Brazo Derecho (del personaje)
-                if (res.poseLandmarks[11].visibility > 0.6 && res.poseLandmarks[13].visibility > 0.6) {
-                    actualizarHuesos(res.poseLandmarks[11], res.poseLandmarks[13], res.poseLandmarks[15], bDer, -1);
-                } else {
-                    relajarBrazo(bDer);
-                }
-
-                // Brazo Izquierdo (del personaje)
-                if (res.poseLandmarks[12].visibility > 0.6 && res.poseLandmarks[14].visibility > 0.6) {
-                    actualizarHuesos(res.poseLandmarks[12], res.poseLandmarks[14], res.poseLandmarks[16], bIzq, 1);
-                } else {
-                    relajarBrazo(bIzq);
-                }
+                controlarBrazo(res.poseLandmarks[11], res.poseLandmarks[13], res.poseLandmarks[15], bDer, -1);
+                controlarBrazo(res.poseLandmarks[12], res.poseLandmarks[14], res.poseLandmarks[16], bIzq, 1);
             }
-
-            // Manos ultra-detalladas
-            if (res.rightHandLandmarks) actualizarDedos(res.rightHandLandmarks, bDer.dedos);
-            if (res.leftHandLandmarks) actualizarDedos(res.leftHandLandmarks, bIzq.dedos);
         });
 
-        function actualizarHuesos(h, c, m, miembro, lado) {
-            const angH = Math.atan2(c.y - h.y, (c.x - h.x) * lado) + Math.PI/2;
-            miembro.hombro.rotation.z = THREE.MathUtils.lerp(miembro.hombro.rotation.z, angH * lado, 0.3);
-            
-            const angC = Math.atan2(m.y - c.y, (m.x - c.x) * lado) - angH + Math.PI/2;
-            miembro.codo.rotation.z = THREE.MathUtils.lerp(miembro.codo.rotation.z, angC * lado, 0.3);
-        }
-
-        function relajarBrazo(miembro) {
-            miembro.hombro.rotation.z = THREE.MathUtils.lerp(miembro.hombro.rotation.z, 0, 0.1);
-            miembro.codo.rotation.z = THREE.MathUtils.lerp(miembro.codo.rotation.z, 0, 0.1);
-        }
-
-        function actualizarDedos(puntos, esferas) {
-            const base = puntos[0];
-            [4, 8, 12, 16, 20].forEach((id, i) => {
-                esferas[i].position.x = (puntos[id].x - base.x) * -2.5;
-                esferas[i].position.y = (puntos[id].y - base.y) * -2.5;
-                esferas[i].position.z = (puntos[id].z - base.z) * 2.5;
-            });
+        function controlarBrazo(h, c, m, obj, lado) {
+            // Solo movemos si la confianza es alta
+            if (h.visibility > 0.7 && c.visibility > 0.7) {
+                const angH = Math.atan2(c.y - h.y, (c.x - h.x) * lado) + Math.PI/2;
+                obj.hombro.rotation.z = suavizar(obj.hombro.rotation.z, angH * lado, 0.15);
+                
+                const angC = Math.atan2(m.y - c.y, (m.x - c.x) * lado) - angH + Math.PI/2;
+                // Limitador físico del codo (no permitir ángulos imposibles)
+                const angCLimitado = Math.max(-2, Math.min(2, angC));
+                obj.codo.rotation.z = suavizar(obj.codo.rotation.z, angCLimitado * lado, 0.15);
+            } else {
+                // Posición de reposo si se pierde el tracking
+                obj.hombro.rotation.z = suavizar(obj.hombro.rotation.z, 0.2 * -lado, 0.05);
+                obj.codo.rotation.z = suavizar(obj.codo.rotation.z, 0, 0.05);
+            }
         }
 
         const camera = new Camera(videoElement, {
