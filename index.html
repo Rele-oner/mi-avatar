@@ -3,96 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Avatar Mirror - Estable</title>
+    <title>AI Avatar Mirror - Holistic Tracker</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 
     <style>
         body { 
-            font-family: 'Segoe UI', sans-serif; 
-            background: #0a0a0a; 
+            font-family: 'Courier New', Courier, monospace; 
+            background: #050505; 
             color: #00ffcc; 
             margin: 0; 
             display: flex; 
             flex-direction: column; 
             align-items: center; 
         }
-        .header { padding: 15px; text-align: center; width: 100%; background: #111; border-bottom: 2px solid #00ffcc; }
+        .header { padding: 15px; text-align: center; width: 100%; border-bottom: 1px solid #333; }
         
+        /* Contenedor Dual */
         .main-view { 
             display: flex; 
-            justify-content: center; 
+            justify-content: space-around; 
             align-items: center; 
-            width: 100vw; 
-            height: 80vh; 
+            width: 95vw; 
+            height: 70vh; 
+            margin-top: 20px;
             gap: 20px;
-            padding: 20px;
-            box-sizing: border-box;
         }
 
         .view-box {
             position: relative;
             flex: 1;
-            background: #000;
+            background: #111;
             border: 2px solid #333;
-            border-radius: 12px;
+            border-radius: 10px;
             overflow: hidden;
             display: flex;
             justify-content: center;
             align-items: center;
-            aspect-ratio: 4/3;
         }
 
         video { display: none; }
         canvas { 
-            width: 100%; 
-            height: 100%; 
-            transform: rotateY(180deg); /* Efecto espejo */
+            max-width: 100%; 
+            max-height: 100%; 
+            transform: rotateY(180deg); 
         }
 
         .label {
             position: absolute;
-            top: 15px;
-            left: 15px;
-            background: rgba(0, 255, 204, 0.8);
-            color: #000;
-            padding: 5px 12px;
-            border-radius: 4px;
-            font-weight: bold;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 255, 204, 0.2);
+            padding: 5px 10px;
+            border-radius: 5px;
             font-size: 12px;
-            z-index: 10;
+            z-index: 5;
         }
 
-        #status-bar {
-            background: #111;
-            padding: 10px 30px;
-            border-radius: 20px;
-            border: 1px solid #00ffcc;
-            margin-bottom: 20px;
+        .loading-overlay { 
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: #000; display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; z-index: 100; 
         }
     </style>
 </head>
 <body>
 
+    <div id="loader" class="loading-overlay">
+        <h1>SINCRONIZANDO AVATAR...</h1>
+        <p>Cargando red neuronal holística</p>
+    </div>
+
     <div class="header">
-        <h1>SISTEMA DE CAPTURA HOLÍSTICA</h1>
+        <h2>SISTEMA DE DUPLICACIÓN DE MOVIMIENTO</h2>
     </div>
 
     <div class="main-view">
         <div class="view-box">
-            <div class="label">CAPTURA REAL</div>
+            <div class="label">CAPTURA DE VIDEO</div>
             <video id="webcam"></video>
             <canvas id="canvas_capture"></canvas>
         </div>
 
         <div class="view-box">
-            <div class="label">MONIGOTE DIGITAL</div>
+            <div class="label">MONIGOTE (AVATAR)</div>
             <canvas id="canvas_avatar"></canvas>
         </div>
     </div>
-
-    <div id="status-bar">Esperando cámara...</div>
 
     <script type="module">
         const videoElement = document.getElementById('webcam');
@@ -101,53 +99,53 @@
         
         const ctxCap = canvasCapture.getContext('2d');
         const ctxAva = canvasAvatar.getContext('2d');
-        const statusBar = document.getElementById('status-bar');
+        const loader = document.getElementById('loader');
 
         function onResults(results) {
-            statusBar.innerText = results.poseLandmarks ? "Sujeto detectado - Sincronizado" : "Buscando sujeto...";
+            loader.style.display = "none";
+            
+            // Ajustar resolución
+            [canvasCapture, canvasAvatar].forEach(c => {
+                c.width = videoElement.videoWidth;
+                c.height = videoElement.videoHeight;
+            });
 
-            // Ajustar resolución de los lienzos
-            canvasCapture.width = canvasAvatar.width = videoElement.videoWidth;
-            canvasCapture.height = canvasAvatar.height = videoElement.videoHeight;
-
-            // --- RENDER IZQUIERDO (REALIDAD AUMENTADA) ---
+            // --- DIBUJO CAPTURA (IZQUIERDA) ---
             ctxCap.save();
             ctxCap.clearRect(0, 0, canvasCapture.width, canvasCapture.height);
             ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
             
-            // Dibujamos la malla sutilmente encima
-            if (results.poseLandmarks) {
-                drawConnectors(ctxCap, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC', lineWidth: 2});
-            }
-            if (results.leftHandLandmarks) {
-                drawConnectors(ctxCap, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FF0000', lineWidth: 2});
-            }
-            if (results.rightHandLandmarks) {
-                drawConnectors(ctxCap, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
-            }
+            // Dibujar mallas sobre la imagen real
+            drawConnectors(ctxCap, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC', lineWidth: 2});
+            drawConnectors(ctxCap, results.faceLandmarks, FACEMESH_TESSELATION, {color: '#C0C0C040', lineWidth: 1});
+            drawConnectors(ctxCap, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FF0000', lineWidth: 2});
+            drawConnectors(ctxCap, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
             ctxCap.restore();
 
-            // --- RENDER DERECHO (EL MONIGOTE) ---
+
+            // --- DIBUJO MONIGOTE (DERECHA) ---
             ctxAva.save();
             ctxAva.clearRect(0, 0, canvasAvatar.width, canvasAvatar.height);
-            ctxAva.fillStyle = "#050505";
+            // Fondo sólido para el monigote
+            ctxAva.fillStyle = "#111";
             ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
 
-            // Cuerpo y brazos del monigote
+            // Dibujar esqueleto (Monigote)
+            // Cuerpo
             if (results.poseLandmarks) {
-                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#FFFFFF', lineWidth: 4});
-                drawLandmarks(ctxAva, results.poseLandmarks, {color: '#00ffcc', lineWidth: 1, radius: 2});
+                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#FFFFFF', lineWidth: 5});
+                drawLandmarks(ctxAva, results.poseLandmarks, {color: '#00ffcc', lineWidth: 1, radius: 3});
             }
-            // Manos detalladas
+            // Manos
             if (results.leftHandLandmarks) {
-                drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 2});
+                drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 3});
             }
             if (results.rightHandLandmarks) {
-                drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 2});
+                drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 3});
             }
-            // Cara del monigote (contornos expresivos)
+            // Cara (Simplificada para el monigote)
             if (results.faceLandmarks) {
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_CONTOURS, {color: '#00ffcc', lineWidth: 1});
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_CONTOURS, {color: '#00ffcc', lineWidth: 2});
             }
 
             ctxAva.restore();
