@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Avatar Mirror - Sticker Mode</title>
+    <title>AI Avatar Mirror - Character Sync</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -25,10 +25,7 @@
             height: 100%; display: flex; justify-content: center; align-items: center;
         }
         video { display: none; }
-        canvas { 
-            max-width: 100%; max-height: 100%; 
-            transform: rotateY(180deg);
-        }
+        canvas { max-width: 100%; max-height: 100%; transform: rotateY(180deg); }
         .label {
             position: absolute; top: 10px; left: 10px; 
             background: rgba(0, 255, 204, 0.2); padding: 5px 10px; 
@@ -39,7 +36,7 @@
 <body>
 
     <div class="header">
-        <h2>SISTEMA DE STICKER ANIMADO - RELE-ONCR</h2>
+        <h2>SISTEMA DE AVATAR PERSONAJE - RELE-ONCR v4.0</h2>
     </div>
 
     <div class="main-view">
@@ -49,7 +46,7 @@
             <canvas id="canvas_capture"></canvas>
         </div>
         <div class="view-box">
-            <div class="label">STICKER PERSONAJE</div>
+            <div class="label">PERSONAJE (AURA VERDE)</div>
             <canvas id="canvas_avatar"></canvas>
         </div>
     </div>
@@ -61,62 +58,66 @@
         const ctxCap = canvasCapture.getContext('2d');
         const ctxAva = canvasAvatar.getContext('2d');
 
-        // PRECARGA DEL PERSONAJE (STICKER)
-        const stickerImg = new Image();
-        stickerImg.src = 'https://i.ibb.co/v4m0Ym9/avatar-sticker.png'; // Aquí irá el PNG transparente de tu personaje
-
         function onResults(results) {
             [canvasCapture, canvasAvatar].forEach(c => {
                 c.width = videoElement.videoWidth;
                 c.height = videoElement.videoHeight;
             });
 
-            // LADO IZQUIERDO (REAL)
+            // 1. VISTA REAL (Izquierda)
             ctxCap.save();
             ctxCap.clearRect(0, 0, canvasCapture.width, canvasCapture.height);
             ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
             ctxCap.restore();
 
-            // LADO DERECHO (STICKER)
+            // 2. PERSONAJE DIGITAL (Derecha)
             ctxAva.save();
             ctxAva.clearRect(0, 0, canvasAvatar.width, canvasAvatar.height);
             ctxAva.fillStyle = "#050505";
             ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
 
             if (results.poseLandmarks) {
-                // Dibujamos el "esqueleto" blanco que pediste, pero con estilo neón
-                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#FFFFFF', lineWidth: 4});
+                // Dibujamos el cuerpo con el aura verde neón de la imagen
+                ctxAva.shadowBlur = 15;
+                ctxAva.shadowColor = "#00ff33";
                 
-                // --- LÓGICA DE STICKER ---
-                // Calculamos el centro del pecho y los hombros para posicionar el cuerpo del personaje
-                const leftShoulder = results.poseLandmarks[11];
-                const rightShoulder = results.poseShoulder = results.poseLandmarks[12];
-                
-                const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * canvasAvatar.width;
-                const centerY = ((leftShoulder.y + rightShoulder.y) / 2) * canvasAvatar.height;
-                
-                // Escalado dinámico según la distancia de los hombros
-                const width = Math.abs(leftShoulder.x - rightShoulder.x) * canvasAvatar.width * 3.5;
-                const height = width * (stickerImg.height / stickerImg.width);
-
-                // Dibujamos el sticker sobre el esqueleto
-                if (stickerImg.complete) {
-                    ctxAva.globalAlpha = 0.9; // Un poco de transparencia para ver el esqueleto blanco debajo
-                    ctxAva.drawImage(stickerImg, centerX - width/2, centerY - height/3, width, height);
-                }
-
-                // Añadimos el detalle de los ojos/boca neón que ya teníamos
-                if (results.faceLandmarks) {
-                    drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LIPS, {color: '#00ffcc', lineWidth: 2});
-                    drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LEFT_IRIS, {color: '#00ffcc', lineWidth: 2});
-                    drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_RIGHT_IRIS, {color: '#00ffcc', lineWidth: 2});
-                }
+                // Hombros y Torso (Blanco sólido con aura)
+                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#FFFFFF', lineWidth: 5});
             }
+
+            if (results.faceLandmarks) {
+                // Cascos del personaje (Simulados con el contorno facial)
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_FACE_OVAL, {color: '#00ff33', lineWidth: 2});
+                
+                // Ojos Azules (como en tu imagen)
+                ctxAva.shadowColor = "#00ccff";
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LEFT_IRIS, {color: '#00ccff', lineWidth: 2});
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_RIGHT_IRIS, {color: '#00ccff', lineWidth: 2});
+                
+                // Boca y Expresión (Precisión total)
+                ctxAva.shadowBlur = 5;
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LIPS, {color: '#FFFFFF', lineWidth: 2});
+            }
+
+            if (results.rightHandLandmarks || results.leftHandLandmarks) {
+                // Manos con brillo neón
+                ctxAva.shadowColor = "#00ff33";
+                if(results.rightHandLandmarks) drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 3});
+                if(results.leftHandLandmarks) drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 3});
+            }
+
             ctxAva.restore();
         }
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, refineFaceLandmarks: true });
+        holistic.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            refineFaceLandmarks: true,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+
         holistic.onResults(onResults);
 
         const camera = new Camera(videoElement, {
