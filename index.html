@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Avatar Mirror - Graphic Overlay</title>
+    <title>AI Avatar Mirror - Sticker Mode</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -34,22 +34,12 @@
             background: rgba(0, 255, 204, 0.2); padding: 5px 10px; 
             border-radius: 5px; font-size: 12px; z-index: 5;
         }
-        .loading-overlay { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: #000; display: flex; flex-direction: column; 
-            justify-content: center; align-items: center; z-index: 100; 
-        }
     </style>
 </head>
 <body>
 
-    <div id="loader" class="loading-overlay">
-        <h1>CARGANDO ASSETS GRÁFICOS...</h1>
-        <p>Sincronizando imagen con red neuronal</p>
-    </div>
-
     <div class="header">
-        <h2>SISTEMA DE AVATAR GRÁFICO ANIMADO</h2>
+        <h2>SISTEMA DE STICKER ANIMADO - RELE-ONCR</h2>
     </div>
 
     <div class="main-view">
@@ -59,7 +49,7 @@
             <canvas id="canvas_capture"></canvas>
         </div>
         <div class="view-box">
-            <div class="label">AVATAR GRÁFICO (RELE-ONCR)</div>
+            <div class="label">STICKER PERSONAJE</div>
             <canvas id="canvas_avatar"></canvas>
         </div>
     </div>
@@ -70,80 +60,63 @@
         const canvasAvatar = document.getElementById('canvas_avatar');
         const ctxCap = canvasCapture.getContext('2d');
         const ctxAva = canvasAvatar.getContext('2d');
-        const loader = document.getElementById('loader');
 
-        // CARGAR IMAGEN DEL AVATAR
-        const avatarImg = new Image();
-        // He puesto el enlace a la imagen que generamos, asegúrate de tener acceso a internet
-        avatarImg.src = 'https://r.jina.ai/i/697968f9a2024796859e874cc66c1f10'; 
+        // PRECARGA DEL PERSONAJE (STICKER)
+        const stickerImg = new Image();
+        stickerImg.src = 'https://i.ibb.co/v4m0Ym9/avatar-sticker.png'; // Aquí irá el PNG transparente de tu personaje
 
         function onResults(results) {
-            loader.style.display = "none";
-            
             [canvasCapture, canvasAvatar].forEach(c => {
                 c.width = videoElement.videoWidth;
                 c.height = videoElement.videoHeight;
             });
 
-            // 1. DIBUJO CAPTURA REAL
+            // LADO IZQUIERDO (REAL)
             ctxCap.save();
             ctxCap.clearRect(0, 0, canvasCapture.width, canvasCapture.height);
             ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
             ctxCap.restore();
 
-            // 2. DIBUJO AVATAR GRÁFICO
+            // LADO DERECHO (STICKER)
             ctxAva.save();
             ctxAva.clearRect(0, 0, canvasAvatar.width, canvasAvatar.height);
             ctxAva.fillStyle = "#050505";
             ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
 
             if (results.poseLandmarks) {
-                // Dibujamos el esqueleto de fondo (opcional, para dar estructura)
-                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC33', lineWidth: 2});
-            }
-
-            if (results.faceLandmarks) {
-                // CALCULAR POSICIÓN Y ESCALA PARA LA CABEZA
-                // Usamos el punto de la frente (10) y el mentón (152) para medir la cara
-                const top = results.faceLandmarks[10];
-                const bottom = results.faceLandmarks[152];
-                const faceHeight = Math.abs(bottom.y - top.y) * canvasAvatar.height;
+                // Dibujamos el "esqueleto" blanco que pediste, pero con estilo neón
+                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#FFFFFF', lineWidth: 4});
                 
-                // Centro de la cara
-                const centerX = results.faceLandmarks[1].x * canvasAvatar.width;
-                const centerY = results.faceLandmarks[1].y * canvasAvatar.height;
+                // --- LÓGICA DE STICKER ---
+                // Calculamos el centro del pecho y los hombros para posicionar el cuerpo del personaje
+                const leftShoulder = results.poseLandmarks[11];
+                const rightShoulder = results.poseShoulder = results.poseLandmarks[12];
+                
+                const centerX = ((leftShoulder.x + rightShoulder.x) / 2) * canvasAvatar.width;
+                const centerY = ((leftShoulder.y + rightShoulder.y) / 2) * canvasAvatar.height;
+                
+                // Escalado dinámico según la distancia de los hombros
+                const width = Math.abs(leftShoulder.x - rightShoulder.x) * canvasAvatar.width * 3.5;
+                const height = width * (stickerImg.height / stickerImg.width);
 
-                // Dibujar la imagen del avatar centrada en la cara
-                // Ajustamos el tamaño de la imagen proporcionalmente a la cara detectada
-                const imgScale = 3.5; // Ajusta este valor para que la imagen cubra bien los hombros
-                const imgW = faceHeight * imgScale;
-                const imgH = faceHeight * imgScale;
+                // Dibujamos el sticker sobre el esqueleto
+                if (stickerImg.complete) {
+                    ctxAva.globalAlpha = 0.9; // Un poco de transparencia para ver el esqueleto blanco debajo
+                    ctxAva.drawImage(stickerImg, centerX - width/2, centerY - height/3, width, height);
+                }
 
-                ctxAva.drawImage(
-                    avatarImg, 
-                    centerX - imgW / 2, 
-                    centerY - imgH / 2.2, // Un poco hacia arriba para alinear ojos
-                    imgW, 
-                    imgH
-                );
-
-                // Opcional: Dibujar los ojos brillantes sobre la imagen para que "sigan" el track
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LEFT_IRIS, {color: '#00ffcc', lineWidth: 1});
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_RIGHT_IRIS, {color: '#00ffcc', lineWidth: 1});
+                // Añadimos el detalle de los ojos/boca neón que ya teníamos
+                if (results.faceLandmarks) {
+                    drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LIPS, {color: '#00ffcc', lineWidth: 2});
+                    drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LEFT_IRIS, {color: '#00ffcc', lineWidth: 2});
+                    drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_RIGHT_IRIS, {color: '#00ffcc', lineWidth: 2});
+                }
             }
-
             ctxAva.restore();
         }
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({
-            modelComplexity: 1,
-            smoothLandmarks: true,
-            refineFaceLandmarks: true,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
+        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, refineFaceLandmarks: true });
         holistic.onResults(onResults);
 
         const camera = new Camera(videoElement, {
