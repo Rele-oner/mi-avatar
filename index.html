@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Avatar Mirror - 3D Skeleton Fix</title>
+    <title>AI Avatar Mirror - Ultra Stable 2D</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <style>
         body { 
@@ -21,13 +20,15 @@
             width: 95vw; height: 75vh; margin-top: 20px; gap: 20px;
         }
         .view-box {
-            position: relative; flex: 1; background: #111; 
+            position: relative; flex: 1; background: #0a0a0a; 
             border: 2px solid #333; border-radius: 10px; overflow: hidden;
             height: 100%; display: flex; justify-content: center; align-items: center;
         }
         video { display: none; }
-        canvas { max-width: 100%; max-height: 100%; }
-        #canvas_capture { transform: rotateY(180deg); }
+        canvas { 
+            max-width: 100%; max-height: 100%; 
+            transform: rotateY(180deg); /* Efecto espejo */
+        }
         .label {
             position: absolute; top: 10px; left: 10px; 
             background: rgba(0, 255, 204, 0.2); padding: 5px 10px; 
@@ -43,103 +44,92 @@
 <body>
 
     <div id="loader" class="loading-overlay">
-        <h1>RECALIBRANDO MOTOR 3D...</h1>
-        <p>Ajustando escalas y esqueleto</p>
+        <h1>SISTEMA DE ESTABILIZACIÓN ACTIVO</h1>
+        <p>Optimizando trazado de movimiento 2D...</p>
     </div>
 
     <div class="header">
-        <h2>SISTEMA DE DUPLICACIÓN DE MOVIMIENTO 3D v2.0</h2>
+        <h2>SISTEMA DE CAPTURA ESTABLE v3.0 (PRO)</h2>
     </div>
 
     <div class="main-view">
         <div class="view-box">
-            <div class="label">CAPTURA REAL</div>
+            <div class="label">ENTRADA DE VIDEO</div>
             <video id="webcam"></video>
             <canvas id="canvas_capture"></canvas>
         </div>
-        <div class="view-box" id="container_3d">
-            <div class="label">AVATAR 3D RECALIBRADO</div>
+        <div class="view-box">
+            <div class="label">AVATAR ESTABLE (STORM-SYNC)</div>
+            <canvas id="canvas_avatar"></canvas>
         </div>
     </div>
 
     <script type="module">
         const videoElement = document.getElementById('webcam');
         const canvasCapture = document.getElementById('canvas_capture');
+        const canvasAvatar = document.getElementById('canvas_avatar');
         const ctxCap = canvasCapture.getContext('2d');
+        const ctxAva = canvasAvatar.getContext('2d');
         const loader = document.getElementById('loader');
-        const container3d = document.getElementById('container_3d');
-
-        // --- MOTOR THREE.JS ---
-        const scene = new THREE.Scene();
-        const camera3d = new THREE.PerspectiveCamera(50, container3d.clientWidth / container3d.clientHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(container3d.clientWidth, container3d.clientHeight);
-        container3d.appendChild(renderer.domElement);
-
-        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-        const directionalLight = new THREE.DirectionalLight(0x00ffcc, 1);
-        directionalLight.position.set(0, 1, 5);
-        scene.add(directionalLight);
-
-        // Nodos y Esqueleto
-        const points3d = [];
-        const sphereGeo = new THREE.SphereGeometry(0.02, 16, 16);
-        const mat = new THREE.MeshPhongMaterial({ color: 0x00ffcc });
-
-        for (let i = 0; i < 33; i++) {
-            const sphere = new THREE.Mesh(sphereGeo, mat);
-            scene.add(sphere);
-            points3d.push(sphere);
-        }
-
-        // Líneas para conectar los puntos (Esqueleto)
-        const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
-        const lineGroup = new THREE.Group();
-        scene.add(lineGroup);
-
-        camera3d.position.set(0, 0, 3); // Alejamos la cámara para ver todo el cuerpo
 
         function onResults(results) {
             loader.style.display = "none";
-            canvasCapture.width = videoElement.videoWidth;
-            canvasCapture.height = videoElement.videoHeight;
+            
+            // Sincronizar tamaños
+            [canvasCapture, canvasAvatar].forEach(c => {
+                c.width = videoElement.videoWidth;
+                c.height = videoElement.videoHeight;
+            });
 
-            // 2D Draw
+            // --- LADO IZQUIERDO: VIDEO REAL ---
             ctxCap.save();
             ctxCap.clearRect(0, 0, canvasCapture.width, canvasCapture.height);
             ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
+            
+            // Dibujamos guías finas en el video real
             if (results.poseLandmarks) {
-                drawConnectors(ctxCap, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC', lineWidth: 2});
+                drawConnectors(ctxCap, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC66', lineWidth: 1});
             }
             ctxCap.restore();
 
-            // 3D Update
+            // --- LADO DERECHO: AVATAR ESTABLE ---
+            ctxAva.save();
+            ctxAva.clearRect(0, 0, canvasAvatar.width, canvasAvatar.height);
+            
+            // Fondo oscuro limpio
+            ctxAva.fillStyle = "#050505";
+            ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
+
             if (results.poseLandmarks) {
-                lineGroup.clear(); // Limpiamos líneas anteriores
+                // Dibujar conexiones del cuerpo con grosor para que parezca un personaje
+                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#FFFFFF', lineWidth: 6});
+                drawLandmarks(ctxAva, results.poseLandmarks, {color: '#00FFCC', lineWidth: 1, radius: 4});
                 
-                results.poseLandmarks.forEach((landmark, index) => {
-                    const p = points3d[index];
-                    // Normalización corregida: centramos y escalamos
-                    p.position.x = (0.5 - landmark.x) * 2; 
-                    p.position.y = (0.5 - landmark.y) * 2;
-                    p.position.z = -landmark.z * 1.5;
-                });
+                // Manos (Derecha e Izquierda)
+                if (results.leftHandLandmarks) {
+                    drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#00FFCC', lineWidth: 3});
+                }
+                if (results.rightHandLandmarks) {
+                    drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#00FFCC', lineWidth: 3});
+                }
 
-                // Dibujar conexiones en 3D
-                POSE_CONNECTIONS.forEach(([startIdx, endIdx]) => {
-                    const start = points3d[startIdx].position;
-                    const end = points3d[endIdx].position;
-                    const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-                    const line = new THREE.Line(geometry, lineMat);
-                    lineGroup.add(line);
-                });
+                // Cara simplificada (Solo el contorno para que no tiemble)
+                if (results.faceLandmarks) {
+                    drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_CONTOURS, {color: '#00FFCC88', lineWidth: 1});
+                }
             }
-
-            renderer.render(scene, camera3d);
+            ctxAva.restore();
         }
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
+        
+        holistic.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true, // Esto reduce el temblor drásticamente
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
+        });
+
         holistic.onResults(onResults);
 
         const camera = new Camera(videoElement, {
@@ -147,12 +137,6 @@
             width: 640, height: 480
         });
         camera.start();
-
-        window.addEventListener('resize', () => {
-            camera3d.aspect = container3d.clientWidth / container3d.clientHeight;
-            camera3d.updateProjectionMatrix();
-            renderer.setSize(container3d.clientWidth, container3d.clientHeight);
-        });
     </script>
 </body>
 </html>
