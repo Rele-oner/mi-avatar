@@ -3,152 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Avatar Mirror - Holistic Tracker</title>
+    <title>AI 3D Motion Capture - Gemini Dev</title>
+    
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <style>
-        body { 
-            font-family: 'Courier New', Courier, monospace; 
-            background: #050505; 
-            color: #00ffcc; 
-            margin: 0; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-        }
-        .header { padding: 15px; text-align: center; width: 100%; border-bottom: 1px solid #333; }
-        
-        /* Contenedor Dual */
-        .main-view { 
-            display: flex; 
-            justify-content: space-around; 
-            align-items: center; 
-            width: 95vw; 
-            height: 70vh; 
-            margin-top: 20px;
-            gap: 20px;
-        }
-
-        .view-box {
-            position: relative;
-            flex: 1;
-            background: #111;
-            border: 2px solid #333;
-            border-radius: 10px;
-            overflow: hidden;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
+        body { margin: 0; background: #0a0a0a; color: #00ffcc; font-family: 'Segoe UI', sans-serif; overflow: hidden; }
+        .ui-container { position: absolute; top: 0; left: 0; width: 100%; display: flex; justify-content: space-between; padding: 20px; box-sizing: border-box; pointer-events: none; z-index: 10; }
+        .view-panel { background: rgba(0,0,0,0.7); border: 1px solid #00ffcc; border-radius: 8px; padding: 10px; pointer-events: auto; }
+        #canvas_container { width: 100vw; height: 100vh; cursor: move; }
         video { display: none; }
-        canvas { 
-            max-width: 100%; 
-            max-height: 100%; 
-            transform: rotateY(180deg); 
-        }
-
-        .label {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0, 255, 204, 0.2);
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 12px;
-            z-index: 5;
-        }
-
-        .loading-overlay { 
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: #000; display: flex; flex-direction: column; 
-            justify-content: center; align-items: center; z-index: 100; 
-        }
+        #capture_preview { width: 200px; height: 150px; border: 1px solid #555; transform: rotateY(180deg); }
+        .loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; justify-content: center; align-items: center; z-index: 100; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div id="loader" class="loading-overlay">
-        <h1>SINCRONIZANDO AVATAR...</h1>
-        <p>Cargando red neuronal holística</p>
-    </div>
+    <div id="loader" class="loader">INICIALIZANDO MOTOR 3D Y RED NEURONAL...</div>
 
-    <div class="header">
-        <h2>SISTEMA DE DUPLICACIÓN DE MOVIMIENTO</h2>
-    </div>
-
-    <div class="main-view">
-        <div class="view-box">
-            <div class="label">CAPTURA DE VIDEO</div>
+    <div class="ui-container">
+        <div class="view-panel">
+            <small>VISTA DE CAPTURA</small><br>
             <video id="webcam"></video>
-            <canvas id="canvas_capture"></canvas>
+            <canvas id="capture_preview"></canvas>
         </div>
-
-        <div class="view-box">
-            <div class="label">MONIGOTE (AVATAR)</div>
-            <canvas id="canvas_avatar"></canvas>
+        <div class="view-panel" style="text-align: right;">
+            <strong>ESTADO: </strong> <span id="status">Buscando...</span><br>
+            <small>Usa el ratón para rotar la cámara 3D</small>
         </div>
     </div>
+
+    <div id="canvas_container"></div>
 
     <script type="module">
-        const videoElement = document.getElementById('webcam');
-        const canvasCapture = document.getElementById('canvas_capture');
-        const canvasAvatar = document.getElementById('canvas_avatar');
+        // --- CONFIGURACIÓN THREE.JS (EL MUNDO 3D) ---
+        const container = document.getElementById('canvas_container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x050505);
         
-        const ctxCap = canvasCapture.getContext('2d');
-        const ctxAva = canvasAvatar.getContext('2d');
-        const loader = document.getElementById('loader');
+        const camera3D = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera3D.position.set(0, 0, 3);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        container.appendChild(renderer.domElement);
+
+        // Luces
+        const light = new THREE.PointLight(0x00ffcc, 1, 100);
+        light.position.set(0, 10, 10);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x404040));
+
+        // --- CREACIÓN DEL AVATAR (MONIGOTE 3D) ---
+        const bones = {};
+        const boneMaterial = new THREE.MeshStandardMaterial({ color: 0x00ffcc, emissive: 0x004433 });
+        const jointMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+
+        function createJoint(name, x, y, z) {
+            const geo = new THREE.SphereGeometry(0.04, 16, 16);
+            const mesh = new THREE.Mesh(geo, jointMaterial);
+            mesh.position.set(x, y, z);
+            scene.add(mesh);
+            bones[name] = mesh;
+            return mesh;
+        }
+
+        // Definimos articulaciones principales (Medio cuerpo)
+        const jointNames = [
+            'nose', 'leftShoulder', 'rightShoulder', 'leftElbow', 
+            'rightElbow', 'leftWrist', 'rightWrist', 'mouthLeft', 'mouthRight'
+        ];
+        jointNames.forEach(name => createJoint(name, 0, 0, 0));
+
+        // --- PROCESAMIENTO DE IA ---
+        const videoElement = document.getElementById('webcam');
+        const canvasPreview = document.getElementById('capture_preview');
+        const ctxPre = canvasPreview.getContext('2d');
+        const statusText = document.getElementById('status');
 
         function onResults(results) {
-            loader.style.display = "none";
+            document.getElementById('loader').style.display = "none";
             
-            // Ajustar resolución
-            [canvasCapture, canvasAvatar].forEach(c => {
-                c.width = videoElement.videoWidth;
-                c.height = videoElement.videoHeight;
-            });
+            // Dibujar preview pequeña
+            canvasPreview.width = 200;
+            canvasPreview.height = 150;
+            ctxPre.save();
+            ctxPre.clearRect(0, 0, 200, 150);
+            ctxPre.drawImage(results.image, 0, 0, 200, 150);
+            ctxPre.restore();
 
-            // --- DIBUJO CAPTURA (IZQUIERDA) ---
-            ctxCap.save();
-            ctxCap.clearRect(0, 0, canvasCapture.width, canvasCapture.height);
-            ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
-            
-            // Dibujar mallas sobre la imagen real
-            drawConnectors(ctxCap, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC', lineWidth: 2});
-            drawConnectors(ctxCap, results.faceLandmarks, FACEMESH_TESSELATION, {color: '#C0C0C040', lineWidth: 1});
-            drawConnectors(ctxCap, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FF0000', lineWidth: 2});
-            drawConnectors(ctxCap, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 2});
-            ctxCap.restore();
-
-
-            // --- DIBUJO MONIGOTE (DERECHA) ---
-            ctxAva.save();
-            ctxAva.clearRect(0, 0, canvasAvatar.width, canvasAvatar.height);
-            // Fondo sólido para el monigote
-            ctxAva.fillStyle = "#111";
-            ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
-
-            // Dibujar esqueleto (Monigote)
-            // Cuerpo
             if (results.poseLandmarks) {
-                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#FFFFFF', lineWidth: 5});
-                drawLandmarks(ctxAva, results.poseLandmarks, {color: '#00ffcc', lineWidth: 1, radius: 3});
-            }
-            // Manos
-            if (results.leftHandLandmarks) {
-                drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 3});
-            }
-            if (results.rightHandLandmarks) {
-                drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 3});
-            }
-            // Cara (Simplificada para el monigote)
-            if (results.faceLandmarks) {
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_CONTOURS, {color: '#00ffcc', lineWidth: 2});
+                statusText.innerText = "TRACKING ACTIVO";
+                statusText.style.color = "#00ffcc";
+
+                // Función para mapear coordenadas de MediaPipe (0 a 1) a Three.js (-1 a 1)
+                const mapCoords = (landmark) => ({
+                    x: (landmark.x - 0.5) * -2, // Invertido para efecto espejo
+                    y: (landmark.y - 0.5) * -2,
+                    z: -landmark.z * 2 // Profundidad
+                });
+
+                // Actualizar posiciones de los huesos 3D
+                const pose = results.poseLandmarks;
+                
+                const parts = {
+                    'nose': pose[0],
+                    'leftShoulder': pose[11],
+                    'rightShoulder': pose[12],
+                    'leftElbow': pose[13],
+                    'rightElbow': pose[14],
+                    'leftWrist': pose[15],
+                    'rightWrist': pose[16]
+                };
+
+                for (let key in parts) {
+                    if (bones[key]) {
+                        const pos = mapCoords(parts[key]);
+                        bones[key].position.lerp(new THREE.Vector3(pos.x, pos.y, pos.z), 0.5);
+                    }
+                }
+            } else {
+                statusText.innerText = "BUSCANDO SUJETO...";
+                statusText.style.color = "red";
             }
 
-            ctxAva.restore();
+            renderer.render(scene, camera3D);
         }
 
         const holistic = new Holistic({locateFile: (file) => {
@@ -158,19 +140,24 @@
         holistic.setOptions({
             modelComplexity: 1,
             smoothLandmarks: true,
-            refineFaceLandmarks: true,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
+            minDetectionConfidence: 0.7
         });
 
         holistic.onResults(onResults);
 
         const camera = new Camera(videoElement, {
             onFrame: async () => { await holistic.send({image: videoElement}); },
-            width: 640,
-            height: 480
+            width: 640, height: 480
         });
         camera.start();
+
+        // Ajustar ventana
+        window.addEventListener('resize', () => {
+            camera3D.aspect = window.innerWidth / window.innerHeight;
+            camera3D.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
     </script>
 </body>
 </html>
