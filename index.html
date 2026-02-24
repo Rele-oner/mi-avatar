@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Avatar Mirror - 3D Holistic Tracker</title>
+    <title>AI Avatar Mirror - 3D Fix</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <style>
         body { 
@@ -18,6 +18,7 @@
             display: flex; 
             flex-direction: column; 
             align-items: center; 
+            overflow: hidden;
         }
         .header { padding: 15px; text-align: center; width: 100%; border-bottom: 1px solid #333; }
         
@@ -26,7 +27,7 @@
             justify-content: space-around; 
             align-items: center; 
             width: 95vw; 
-            height: 70vh; 
+            height: 75vh; 
             margin-top: 20px;
             gap: 20px;
         }
@@ -45,11 +46,7 @@
         }
 
         video { display: none; }
-        canvas { 
-            max-width: 100%; 
-            max-height: 100%; 
-        }
-        /* Solo el canvas de captura se voltea */
+        canvas { max-width: 100%; max-height: 100%; }
         #canvas_capture { transform: rotateY(180deg); }
 
         .label {
@@ -73,8 +70,8 @@
 <body>
 
     <div id="loader" class="loading-overlay">
-        <h1>INICIANDO MOTOR 3D...</h1>
-        <p>Sincronizando profundidad y mallas</p>
+        <h1>SISTEMA 3D: INICIANDO...</h1>
+        <p id="status">Cargando módulos de visión artificial</p>
     </div>
 
     <div class="header">
@@ -90,7 +87,7 @@
 
         <div class="view-box" id="container_3d">
             <div class="label">AVATAR GENERATIVO (3D)</div>
-            </div>
+        </div>
     </div>
 
     <script type="module">
@@ -98,9 +95,10 @@
         const canvasCapture = document.getElementById('canvas_capture');
         const ctxCap = canvasCapture.getContext('2d');
         const loader = document.getElementById('loader');
+        const statusText = document.getElementById('status');
         const container3d = document.getElementById('container_3d');
 
-        // --- CONFIGURACIÓN THREE.JS ---
+        // --- INICIALIZACIÓN THREE.JS ---
         const scene = new THREE.Scene();
         const camera3d = new THREE.PerspectiveCamera(75, container3d.clientWidth / container3d.clientHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -108,50 +106,58 @@
         renderer.setSize(container3d.clientWidth, container3d.clientHeight);
         container3d.appendChild(renderer.domElement);
 
-        // Luces para el volumen
+        // Luces
         const light = new THREE.PointLight(0x00ffcc, 1, 100);
         light.position.set(0, 0, 10);
         scene.add(light);
         scene.add(new THREE.AmbientLight(0x404040));
 
-        // Creación del "Avatar" (puntos 3D)
-        const geometry = new THREE.SphereGeometry(0.05, 16, 16);
+        // Puntos del Avatar (33 para el cuerpo)
+        const geometry = new THREE.SphereGeometry(0.04, 12, 12);
         const material = new THREE.MeshPhongMaterial({ color: 0x00ffcc, emissive: 0x00ffcc });
         const points3d = [];
 
-        // Pre-creamos 33 esferas para la pose (MediaPipe usa 33 puntos de pose)
         for (let i = 0; i < 33; i++) {
             const sphere = new THREE.Mesh(geometry, material);
+            sphere.visible = false; // Ocultos hasta que haya datos
             scene.add(sphere);
             points3d.push(sphere);
         }
 
-        camera3d.position.z = 2;
-        camera3d.position.y = 0.5;
+        camera3d.position.z = 2.5;
 
+        // --- LÓGICA DE MEDIAPIPE ---
         function onResults(results) {
-            loader.style.display = "none";
+            // Quitar loader al recibir el primer frame con datos
+            if (loader.style.display !== "none") {
+                loader.style.display = "none";
+                console.log("Datos recibidos: Motor 3D en marcha.");
+            }
             
-            // Ajustar canvas 2D
-            canvasCapture.width = videoElement.videoWidth;
-            canvasCapture.height = videoElement.videoHeight;
+            // Redimensionar canvas 2D si es necesario
+            if (canvasCapture.width !== videoElement.videoWidth) {
+                canvasCapture.width = videoElement.videoWidth;
+                canvasCapture.height = videoElement.videoHeight;
+            }
 
-            // --- DIBUJO CAPTURA 2D ---
+            // DIBUJO 2D (Izquierda)
             ctxCap.save();
             ctxCap.clearRect(0, 0, canvasCapture.width, canvasCapture.height);
             ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
-            drawConnectors(ctxCap, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC', lineWidth: 2});
+            if (results.poseLandmarks) {
+                drawConnectors(ctxCap, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC', lineWidth: 2});
+            }
             ctxCap.restore();
 
-            // --- ACTUALIZACIÓN AVATAR 3D ---
+            // ACTUALIZACIÓN 3D (Derecha)
             if (results.poseLandmarks) {
                 results.poseLandmarks.forEach((landmark, index) => {
                     const point = points3d[index];
-                    // Mapeo de coordenadas MediaPipe (0 a 1) a espacio Three.js (-1 a 1)
-                    // Invertimos X para que actúe como espejo
-                    point.position.x = -(landmark.x - 0.5) * 2; 
-                    point.position.y = -(landmark.y - 0.5) * 2;
-                    point.position.z = -landmark.z * 2; // Profundidad real detectada
+                    point.visible = true;
+                    // Mapeo: MediaPipe x,y va de 0 a 1. Lo pasamos a espacio Three.js
+                    point.position.x = -(landmark.x - 0.5) * 3; 
+                    point.position.y = -(landmark.y - 0.5) * 3;
+                    point.position.z = -landmark.z * 2; 
                 });
             }
 
@@ -171,18 +177,30 @@
 
         holistic.onResults(onResults);
 
+        // Iniciar Cámara con manejo de errores
         const camera = new Camera(videoElement, {
-            onFrame: async () => { await holistic.send({image: videoElement}); },
+            onFrame: async () => {
+                await holistic.send({image: videoElement});
+            },
             width: 640,
             height: 480
         });
-        camera.start();
 
-        // Manejar redimensionamiento de ventana
+        statusText.innerText = "Accediendo a la cámara...";
+        camera.start()
+            .then(() => console.log("Cámara iniciada correctamente"))
+            .catch(err => {
+                statusText.innerText = "Error: No se pudo acceder a la cámara";
+                console.error(err);
+            });
+
+        // Ajuste de ventana
         window.addEventListener('resize', () => {
-            camera3d.aspect = container3d.clientWidth / container3d.clientHeight;
+            const w = container3d.clientWidth;
+            const h = container3d.clientHeight;
+            camera3d.aspect = w / h;
             camera3d.updateProjectionMatrix();
-            renderer.setSize(container3d.clientWidth, container3d.clientHeight);
+            renderer.setSize(w, h);
         });
     </script>
 </body>
