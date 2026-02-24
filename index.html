@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Avatar Mirror - Ultra Precision 2D</title>
+    <title>AI Avatar Mirror - Graphic Overlay</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -27,7 +27,7 @@
         video { display: none; }
         canvas { 
             max-width: 100%; max-height: 100%; 
-            transform: rotateY(180deg); /* Efecto espejo */
+            transform: rotateY(180deg);
         }
         .label {
             position: absolute; top: 10px; left: 10px; 
@@ -44,22 +44,22 @@
 <body>
 
     <div id="loader" class="loading-overlay">
-        <h1>RECONECTANDO SISTEMA DE ALTA PRECISIÓN...</h1>
-        <p>Recuperando malla facial y rastreo de extremidades</p>
+        <h1>CARGANDO ASSETS GRÁFICOS...</h1>
+        <p>Sincronizando imagen con red neuronal</p>
     </div>
 
     <div class="header">
-        <h2>SISTEMA DE DUPLICACIÓN DE MOVIMIENTO - PRECISIÓN 2D</h2>
+        <h2>SISTEMA DE AVATAR GRÁFICO ANIMADO</h2>
     </div>
 
     <div class="main-view">
         <div class="view-box">
-            <div class="label">ENTRADA REAL</div>
+            <div class="label">CAPTURA REAL</div>
             <video id="webcam"></video>
             <canvas id="canvas_capture"></canvas>
         </div>
         <div class="view-box">
-            <div class="label">AVATAR DIGITAL DETALLADO</div>
+            <div class="label">AVATAR GRÁFICO (RELE-ONCR)</div>
             <canvas id="canvas_avatar"></canvas>
         </div>
     </div>
@@ -72,69 +72,74 @@
         const ctxAva = canvasAvatar.getContext('2d');
         const loader = document.getElementById('loader');
 
+        // CARGAR IMAGEN DEL AVATAR
+        const avatarImg = new Image();
+        // He puesto el enlace a la imagen que generamos, asegúrate de tener acceso a internet
+        avatarImg.src = 'https://r.jina.ai/i/697968f9a2024796859e874cc66c1f10'; 
+
         function onResults(results) {
             loader.style.display = "none";
             
-            // Sincronizar resoluciones
             [canvasCapture, canvasAvatar].forEach(c => {
                 c.width = videoElement.videoWidth;
                 c.height = videoElement.videoHeight;
             });
 
-            // --- LADO IZQUIERDO: VIDEO REAL + GUÍAS ---
+            // 1. DIBUJO CAPTURA REAL
             ctxCap.save();
             ctxCap.clearRect(0, 0, canvasCapture.width, canvasCapture.height);
             ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
-            
-            if (results.poseLandmarks) {
-                drawConnectors(ctxCap, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC66', lineWidth: 1});
-            }
             ctxCap.restore();
 
-            // --- LADO DERECHO: AVATAR DIGITAL (MÁXIMO DETALLE) ---
+            // 2. DIBUJO AVATAR GRÁFICO
             ctxAva.save();
             ctxAva.clearRect(0, 0, canvasAvatar.width, canvasAvatar.height);
             ctxAva.fillStyle = "#050505";
             ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
 
-            // 1. Cuerpo (Líneas sólidas)
             if (results.poseLandmarks) {
-                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#FFFFFF', lineWidth: 4});
-                drawLandmarks(ctxAva, results.poseLandmarks, {color: '#00FFCC', lineWidth: 1, radius: 2});
+                // Dibujamos el esqueleto de fondo (opcional, para dar estructura)
+                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFCC33', lineWidth: 2});
             }
 
-            // 2. Cara DETALLADA (Boca, Ojos, Contorno)
             if (results.faceLandmarks) {
-                // Contorno y cejas
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_CONTOURS, {color: '#00FFCC', lineWidth: 1});
-                // Labios (Precisión total para hablar)
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LIPS, {color: '#FFFFFF', lineWidth: 1});
-                // Ojos y Pupilas
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LEFT_EYE, {color: '#FFFFFF', lineWidth: 1});
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_RIGHT_EYE, {color: '#FFFFFF', lineWidth: 1});
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LEFT_IRIS, {color: '#00FFCC', lineWidth: 1});
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_RIGHT_IRIS, {color: '#00FFCC', lineWidth: 1});
-            }
+                // CALCULAR POSICIÓN Y ESCALA PARA LA CABEZA
+                // Usamos el punto de la frente (10) y el mentón (152) para medir la cara
+                const top = results.faceLandmarks[10];
+                const bottom = results.faceLandmarks[152];
+                const faceHeight = Math.abs(bottom.y - top.y) * canvasAvatar.height;
+                
+                // Centro de la cara
+                const centerX = results.faceLandmarks[1].x * canvasAvatar.width;
+                const centerY = results.faceLandmarks[1].y * canvasAvatar.height;
 
-            // 3. Manos (Dedos individuales)
-            if (results.leftHandLandmarks) {
-                drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 2});
-                drawLandmarks(ctxAva, results.leftHandLandmarks, {color: '#00FFCC', radius: 1});
-            }
-            if (results.rightHandLandmarks) {
-                drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 2});
-                drawLandmarks(ctxAva, results.rightHandLandmarks, {color: '#00FFCC', radius: 1});
+                // Dibujar la imagen del avatar centrada en la cara
+                // Ajustamos el tamaño de la imagen proporcionalmente a la cara detectada
+                const imgScale = 3.5; // Ajusta este valor para que la imagen cubra bien los hombros
+                const imgW = faceHeight * imgScale;
+                const imgH = faceHeight * imgScale;
+
+                ctxAva.drawImage(
+                    avatarImg, 
+                    centerX - imgW / 2, 
+                    centerY - imgH / 2.2, // Un poco hacia arriba para alinear ojos
+                    imgW, 
+                    imgH
+                );
+
+                // Opcional: Dibujar los ojos brillantes sobre la imagen para que "sigan" el track
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LEFT_IRIS, {color: '#00ffcc', lineWidth: 1});
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_RIGHT_IRIS, {color: '#00ffcc', lineWidth: 1});
             }
 
             ctxAva.restore();
         }
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        
         holistic.setOptions({
             modelComplexity: 1,
-            smoothLandmarks: true, // Estabilización activada
-            refineFaceLandmarks: true, // Activamos el refinado para ojos y labios
+            smoothLandmarks: true,
+            refineFaceLandmarks: true,
             minDetectionConfidence: 0.5,
             minTrackingConfidence: 0.5
         });
