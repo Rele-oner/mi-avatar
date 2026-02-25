@@ -2,149 +2,102 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>AI Avatar - Precision Mesh Engine</title>
+    <title>AI Avatar - Hyper-Mesh Mode</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-
     <style>
-        body { margin: 0; background: #000; color: #00ffcc; font-family: 'Courier New', monospace; overflow: hidden; }
-        .container { display: flex; width: 100vw; height: 100vh; padding: 20px; box-sizing: border-box; gap: 20px; }
-        .canvas-container { position: relative; flex: 1; background: #080808; border: 1px solid #1a1a1a; border-radius: 15px; overflow: hidden; }
-        video { display: none; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: monospace; }
+        .main { display: flex; width: 100vw; height: 100vh; gap: 10px; padding: 10px; box-sizing: border-box; }
+        .box { flex: 1; position: relative; border: 1px solid #1a1a1a; background: #050505; border-radius: 10px; }
         canvas { width: 100%; height: 100%; transform: rotateY(180deg); object-fit: contain; }
-        .status-bar { position: absolute; top: 20px; left: 20px; background: rgba(0, 255, 204, 0.1); padding: 5px 15px; border-left: 3px solid #00ffcc; font-size: 10px; text-transform: uppercase; letter-spacing: 2px; }
+        video { display: none; }
+        .tag { position: absolute; top: 10px; left: 10px; color: #00ffcc; font-size: 10px; background: rgba(0,0,0,0.8); padding: 5px; border: 1px solid #00ffcc; z-index: 10; }
     </style>
 </head>
 <body>
-
-<div class="container">
-    <div class="canvas-container">
-        <div class="status-bar">Source_Capture</div>
-        <video id="webcam"></video>
-        <canvas id="canvas_input"></canvas>
+    <div class="main">
+        <div class="box"><div class="tag">REAL_INPUT</div><video id="v"></video><canvas id="c1"></canvas></div>
+        <div class="box"><div class="tag">HYPER_MESH_v5</div><canvas id="c2"></canvas></div>
     </div>
-    <div class="canvas-container">
-        <div class="status-bar">Neural_Mesh_Output_v4</div>
-        <canvas id="canvas_mesh"></canvas>
-    </div>
-</div>
 
 <script type="module">
-    const videoElement = document.getElementById('webcam');
-    const canvasIn = document.getElementById('canvas_input');
-    const canvasMesh = document.getElementById('canvas_mesh');
-    const ctxIn = canvasIn.getContext('2d');
-    const ctxMesh = canvasMesh.getContext('2d');
+    const video = document.getElementById('v');
+    const ctx1 = document.getElementById('c1').getContext('2d');
+    const ctx2 = document.getElementById('c2').getContext('2d');
 
-    // Función avanzada para crear "tejido" de malla en el cuerpo
-    function drawPrecisionBody(ctx, landmarks, w, h) {
-        const lm = landmarks;
-        ctx.strokeStyle = "rgba(0, 255, 255, 0.5)";
-        ctx.lineWidth = 0.8;
+    // Función para crear volumen (Malla tubular)
+    function drawVolumeMesh(ctx, p1, p2, w, h) {
+        if (!p1 || !p2) return;
+        const dist = Math.hypot((p2.x-p1.x)*w, (p2.y-p1.y)*h);
+        const steps = Math.floor(dist / 10); // Crea un punto cada 10 píxeles
+        const thickness = 20; // Grosor del "tubo" de malla
 
-        const getPt = (idx) => lm[idx] ? { x: lm[idx].x * w, y: lm[idx].y * h } : null;
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.2)";
+        ctx.lineWidth = 0.5;
 
-        const drawNetwork = (p1, p2, p3, p4) => {
-            const pts = [getPt(p1), getPt(p2), getPt(p3), getPt(p4)].filter(p => p);
-            if (pts.length < 3) return;
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const cx = (p1.x + (p2.x - p1.x) * t) * w;
+            const cy = (p1.y + (p2.y - p1.y) * t) * h;
             
+            // Dibujamos anillos de malla para dar volumen
             ctx.beginPath();
-            ctx.moveTo(pts[0].x, pts[0].y);
-            for(let i=1; i<pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-            ctx.closePath();
+            ctx.ellipse(cx, cy, thickness, thickness/2, Math.atan2((p2.y-p1.y)*h, (p2.x-p1.x)*w), 0, Math.PI*2);
             ctx.stroke();
 
-            // Líneas de subdivisión interna (El "secreto" del volumen)
-            if (pts.length === 4) {
+            // Líneas longitudinales para cerrar la red
+            if (i % 2 === 0) {
                 ctx.beginPath();
-                ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[2].x, pts[2].y);
-                ctx.moveTo(pts[1].x, pts[1].y); ctx.lineTo(pts[3].x, pts[3].y);
-                ctx.strokeStyle = "rgba(0, 255, 255, 0.15)";
+                ctx.moveTo(cx - thickness, cy);
+                ctx.lineTo(cx + thickness, cy);
                 ctx.stroke();
             }
-        };
-
-        // Torso Triangulado
-        drawNetwork(11, 12, 24, 23);
-        // Brazos con doble línea de volumen
-        drawNetwork(11, 13, 15); // Izquierdo
-        drawNetwork(12, 14, 16); // Derecho
-        
-        // Conexión Cuello-Hombros
-        const nose = getPt(0);
-        const lS = getPt(11);
-        const rS = getPt(12);
-        if(nose && lS && rS) {
-            ctx.beginPath();
-            ctx.moveTo(nose.x, nose.y); ctx.lineTo(lS.x, lS.y);
-            ctx.lineTo(rS.x, rS.y); ctx.closePath();
-            ctx.stroke();
         }
     }
 
-    function onResults(results) {
-        canvasIn.width = canvasMesh.width = videoElement.videoWidth;
-        canvasIn.height = canvasMesh.height = videoElement.videoHeight;
+    function onResults(res) {
+        const w = ctx1.canvas.width = ctx2.canvas.width = video.videoWidth;
+        const h = ctx1.canvas.height = ctx2.canvas.height = video.videoHeight;
 
-        // Limpieza y fondo
-        ctxIn.drawImage(results.image, 0, 0, canvasIn.width, canvasIn.height);
-        ctxMesh.fillStyle = "#000";
-        ctxMesh.fillRect(0, 0, canvasMesh.width, canvasMesh.height);
+        ctx1.drawImage(res.image, 0, 0);
+        ctx2.fillStyle = "#000";
+        ctx2.fillRect(0, 0, w, h);
 
-        ctxMesh.save();
-        ctxMesh.shadowBlur = 8;
-        ctxMesh.shadowColor = "#00FFFF";
+        ctx2.save();
+        ctx2.shadowBlur = 5; ctx2.shadowColor = "#00ffcc";
 
-        // 1. CARA: MALLA PURA SIN OVERLAY
-        if (results.faceLandmarks) {
-            // Dibujamos el tessellation con transparencia para que no sature
-            drawConnectors(ctxMesh, results.faceLandmarks, FACEMESH_TESSELATION, {
-                color: "rgba(0, 255, 255, 0.3)", 
-                lineWidth: 0.5
-            });
-            // Definimos el óvalo facial pero muy sutil
-            drawConnectors(ctxMesh, results.faceLandmarks, FACEMESH_FACE_OVAL, {
-                color: "rgba(0, 255, 255, 0.6)", 
-                lineWidth: 0.8
-            });
-            // IMPORTANTE: Hemos omitido FACEMESH_LIPS y FACEMESH_EYES para no tener líneas dobles
+        // 1. CARA PURA (Solo malla)
+        if (res.faceLandmarks) {
+            drawConnectors(ctx2, res.faceLandmarks, FACEMESH_TESSELATION, {color: "rgba(0, 255, 204, 0.3)", lineWidth: 0.5});
         }
 
-        // 2. CUERPO: ESTRUCTURA TÉCNICA
-        if (results.poseLandmarks) {
-            drawPrecisionBody(ctxMesh, results.poseLandmarks, canvasMesh.width, canvasMesh.height);
-            // Conectores base para estabilidad visual
-            drawConnectors(ctxMesh, results.poseLandmarks, POSE_CONNECTIONS, {
-                color: "#00FFFF", 
-                lineWidth: 1.2
-            });
+        // 2. CUERPO CON VOLUMEN (Malla de hilos)
+        if (res.poseLandmarks) {
+            const lm = res.poseLandmarks;
+            // Aplicamos el volumen a brazos y torso
+            drawVolumeMesh(ctx2, lm[11], lm[13], w, h); // Brazo I
+            drawVolumeMesh(ctx2, lm[13], lm[15], w, h);
+            drawVolumeMesh(ctx2, lm[12], lm[14], w, h); // Brazo D
+            drawVolumeMesh(ctx2, lm[14], lm[16], w, h);
+            
+            // Malla central (Torso)
+            drawConnectors(ctx2, lm, POSE_CONNECTIONS, {color: "#00ffcc", lineWidth: 1.5});
         }
 
-        // 3. MANOS: WIREFRAME LIMPIO
-        const handCfg = { color: "rgba(255, 255, 255, 0.5)", lineWidth: 1 };
-        if (results.leftHandLandmarks) drawConnectors(ctxMesh, results.leftHandLandmarks, HAND_CONNECTIONS, handCfg);
-        if (results.rightHandLandmarks) drawConnectors(ctxMesh, results.rightHandLandmarks, HAND_CONNECTIONS, handCfg);
+        // 3. MANOS
+        if (res.rightHandLandmarks) drawConnectors(ctx2, res.rightHandLandmarks, HAND_CONNECTIONS, {color: "#fff", lineWidth: 0.8});
+        if (res.leftHandLandmarks) drawConnectors(ctx2, res.leftHandLandmarks, HAND_CONNECTIONS, {color: "#fff", lineWidth: 0.8});
 
-        ctxMesh.restore();
+        ctx2.restore();
     }
 
-    const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-    holistic.setOptions({ 
-        modelComplexity: 1, 
-        smoothLandmarks: true, 
-        refineFaceLandmarks: true, 
-        minDetectionConfidence: 0.7, // Subimos confianza para evitar errores
-        minTrackingConfidence: 0.7 
-    });
+    const holistic = new Holistic({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
+    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, refineFaceLandmarks: true, minDetectionConfidence: 0.7 });
     holistic.onResults(onResults);
 
-    const camera = new Camera(videoElement, {
-        onFrame: async () => { await holistic.send({image: videoElement}); },
-        width: 640, height: 480
-    });
-    camera.start();
+    const cam = new Camera(video, { onFrame: async () => { await holistic.send({image: video}); }, width: 640, height: 480 });
+    cam.start();
 </script>
-
 </body>
 </html>
