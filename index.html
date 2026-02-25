@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Avatar - Full Body Mesh</title>
+    <title>AI Avatar - 3D Mesh Mode</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -20,7 +20,7 @@
 </head>
 <body>
 
-    <div class="header"><h2>SISTEMA DE CAPTURA - FULL MESH BODY</h2></div>
+    <div class="header"><h2>SISTEMA DE CAPTURA - WIREFRAME FULL BODY</h2></div>
 
     <div class="main-view">
         <div class="view-box">
@@ -41,42 +41,49 @@
         const ctxCap = canvasCapture.getContext('2d');
         const ctxAva = canvasAvatar.getContext('2d');
 
-        // Función para dibujar una "malla" manual entre puntos del cuerpo
-        function drawBodyMesh(ctx, landmarks) {
-            const drawPolygon = (points, color) => {
+        // Función para crear el efecto de malla (Wireframe) en el cuerpo
+        function drawBodyWireframe(ctx, landmarks) {
+            const w = canvasAvatar.width;
+            const h = canvasAvatar.height;
+
+            const drawTriangle = (p1, p2, p3) => {
                 ctx.beginPath();
-                ctx.moveTo(points[0].x * canvasAvatar.width, points[0].y * canvasAvatar.height);
-                for (let i = 1; i < points.length; i++) {
-                    ctx.lineTo(points[i].x * canvasAvatar.width, points[i].y * canvasAvatar.height);
-                }
+                ctx.moveTo(p1.x * w, p1.y * h);
+                ctx.lineTo(p2.x * w, p2.y * h);
+                ctx.lineTo(p3.x * w, p3.y * h);
                 ctx.closePath();
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 1;
+                ctx.strokeStyle = "rgba(0, 255, 255, 0.4)";
+                ctx.lineWidth = 0.5;
                 ctx.stroke();
-                // Opcional: Rellenar un poco para dar volumen
-                ctx.fillStyle = "rgba(0, 255, 255, 0.05)";
-                ctx.fill();
             };
 
-            // Torso (Hombros a Caderas)
+            // Creamos triángulos para dar volumen al torso y hombros
             if (landmarks[11] && landmarks[12] && landmarks[23] && landmarks[24]) {
-                drawPolygon([landmarks[11], landmarks[12], landmarks[24], landmarks[23]], "#00FFFF");
+                // Pecho y Abdomen
+                drawTriangle(landmarks[11], landmarks[12], landmarks[23]);
+                drawTriangle(landmarks[12], landmarks[23], landmarks[24]);
+                
+                // Conexión con el cuello/cabeza (punto 0 es la nariz como referencia central)
+                if(landmarks[0]) {
+                    drawTriangle(landmarks[0], landmarks[11], landmarks[12]);
+                }
             }
-            // Brazo Derecho
-            if (landmarks[12] && landmarks[14] && landmarks[16]) {
-                drawPolygon([landmarks[12], landmarks[14], landmarks[16]], "#FFFFFF");
-            }
-            // Brazo Izquierdo
-            if (landmarks[11] && landmarks[13] && landmarks[15]) {
-                drawPolygon([landmarks[11], landmarks[13], landmarks[15]], "#FFFFFF");
-            }
+
+            // Malla para brazos (conecta hombro, codo y muñeca en abanico)
+            const drawArmMesh = (hombro, codo, muñeca) => {
+                if(hombro && codo && muñeca) {
+                    drawTriangle(hombro, codo, {x: (hombro.x + codo.x)/2 + 0.02, y: (hombro.y + codo.y)/2});
+                    drawTriangle(codo, muñeca, {x: (codo.x + muñeca.x)/2 - 0.02, y: (codo.y + muñeca.y)/2});
+                }
+            };
+
+            drawArmMesh(landmarks[12], landmarks[14], landmarks[16]); // Brazo derecho
+            drawArmMesh(landmarks[11], landmarks[13], landmarks[15]); // Brazo izquierdo
         }
 
         function onResults(results) {
-            [canvasCapture, canvasAvatar].forEach(c => {
-                c.width = videoElement.videoWidth;
-                c.height = videoElement.videoHeight;
-            });
+            canvasCapture.width = canvasAvatar.width = videoElement.videoWidth;
+            canvasCapture.height = canvasAvatar.height = videoElement.videoHeight;
 
             ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
 
@@ -84,25 +91,30 @@
             ctxAva.fillStyle = "#00FF00"; 
             ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
 
-            // 1. CUERPO COMPLETO (Malla de Torso y extremidades)
-            if (results.poseLandmarks) {
-                drawBodyMesh(ctxAva, results.poseLandmarks);
-                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFFF', lineWidth: 2});
-            }
+            // Estilo de brillo Neón
+            ctxAva.shadowBlur = 8;
+            ctxAva.shadowColor = "#00FFFF";
 
-            // 2. CARA (Malla densa)
+            // 1. CARA: Malla de alta densidad (Wireframe facial)
             if (results.faceLandmarks) {
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_TESSELATION, {color: 'rgba(255,255,255,0.3)', lineWidth: 0.5});
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_FACE_OVAL, {color: '#FFFFFF', lineWidth: 1});
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LIPS, {color: '#FFFFFF', lineWidth: 1});
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_TESSELATION, {
+                    color: "rgba(255, 255, 255, 0.5)", 
+                    lineWidth: 0.3 
+                });
             }
 
-            // 3. MANOS
+            // 2. CUERPO: Malla geométrica (No líneas simples)
+            if (results.poseLandmarks) {
+                drawBodyWireframe(ctxAva, results.poseLandmarks);
+            }
+
+            // 3. MANOS: Malla de articulaciones
+            const handStyle = { color: 'rgba(0, 255, 255, 0.6)', lineWidth: 1 };
             if (results.rightHandLandmarks) {
-                drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#00FFFF', lineWidth: 1.5});
+                drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, handStyle);
             }
             if (results.leftHandLandmarks) {
-                drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#00FFFF', lineWidth: 1.5});
+                drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, handStyle);
             }
 
             ctxAva.restore();
