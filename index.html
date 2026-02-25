@@ -3,35 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Avatar - Ultimate Mesh Edition</title>
+    <title>AI Avatar - Full Body Mesh Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 
     <style>
         body { font-family: 'Courier New', monospace; background: #000; color: #00ffcc; margin: 0; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
-        .header { padding: 10px; text-align: center; width: 100%; border-bottom: 1px solid #1a1a1a; background: #050505; }
-        .main-view { display: flex; justify-content: center; align-items: center; width: 100vw; height: 85vh; gap: 10px; padding: 10px; }
-        .view-box { position: relative; flex: 1; background: #000; border: 1px solid #333; border-radius: 4px; overflow: hidden; height: 100%; display: flex; justify-content: center; align-items: center; }
+        .header { padding: 10px; text-align: center; width: 100%; border-bottom: 1px solid #1a1a1a; }
+        .main-view { display: flex; justify-content: center; align-items: center; width: 100vw; height: 85vh; gap: 15px; padding: 10px; }
+        .view-box { position: relative; flex: 1; background: #050505; border: 1px solid #333; border-radius: 8px; overflow: hidden; height: 100%; display: flex; justify-content: center; align-items: center; }
         video { display: none; }
         canvas { max-width: 100%; max-height: 100%; transform: rotateY(180deg); }
-        .label { position: absolute; top: 10px; left: 10px; background: rgba(0, 0, 0, 0.8); padding: 4px 8px; border: 1px solid #00ffcc; font-size: 10px; z-index: 5; color: #00ffcc; text-transform: uppercase; }
+        .label { position: absolute; top: 10px; left: 10px; background: rgba(0, 255, 204, 0.1); padding: 4px 10px; border-left: 3px solid #00ffcc; font-size: 11px; z-index: 5; color: #00ffcc; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <h2 style="margin:0; font-size: 18px; letter-spacing: 2px;">SISTEMA DE CAPTURA - ULTIMATE MESH</h2>
+        <h2 style="margin:0; font-size: 20px; letter-spacing: 3px;">AVATAR HOLOGRAPHIC MESH</h2>
     </div>
 
     <div class="main-view">
         <div class="view-box">
-            <div class="label">Input_Stream</div>
+            <div class="label">REAL_TIME_INPUT</div>
             <video id="webcam"></video>
             <canvas id="canvas_capture"></canvas>
         </div>
         <div class="view-box">
-            <div class="label">Avatar_Mesh_Render</div>
+            <div class="label">MESH_RENDER_ENGINE</div>
             <canvas id="canvas_avatar"></canvas>
         </div>
     </div>
@@ -43,75 +43,78 @@
         const ctxCap = canvasCapture.getContext('2d');
         const ctxAva = canvasAvatar.getContext('2d');
 
-        function drawFullMesh(ctx, landmarks, w, h) {
-            const drawTriangle = (p1, p2, p3, color = "rgba(0, 255, 255, 0.2)") => {
+        // Función Maestra para generar la malla del cuerpo (Triangulación Dinámica)
+        function drawComplexBodyMesh(ctx, lm, w, h) {
+            const drawTri = (i, j, k, opacity = 0.2) => {
+                if (!lm[i] || !lm[j] || !lm[k]) return;
                 ctx.beginPath();
-                ctx.moveTo(p1.x * w, p1.y * h);
-                ctx.lineTo(p2.x * w, p2.y * h);
-                ctx.lineTo(p3.x * w, p3.y * h);
+                ctx.moveTo(lm[i].x * w, lm[i].y * h);
+                ctx.lineTo(lm[j].x * w, lm[j].y * h);
+                ctx.lineTo(lm[k].x * w, lm[k].y * h);
                 ctx.closePath();
-                ctx.strokeStyle = color;
-                ctx.lineWidth = 0.5;
+                ctx.strokeStyle = `rgba(0, 255, 255, ${opacity})`;
+                ctx.lineWidth = 0.6;
                 ctx.stroke();
             };
 
-            // Mallado de Torso y Brazos (Conectamos puntos para crear "volumen")
-            if (landmarks[11] && landmarks[12] && landmarks[23] && landmarks[24]) {
-                // Pecho
-                drawTriangle(landmarks[11], landmarks[12], landmarks[14]); // Hombro-Hombro-Codo
-                drawTriangle(landmarks[12], landmarks[11], landmarks[13]); 
-                // Abdomen
-                drawTriangle(landmarks[11], landmarks[23], landmarks[24]);
-                drawTriangle(landmarks[11], landmarks[12], landmarks[24]);
-            }
+            // Estructura de malla para el Torso (Pecho y Abdomen)
+            drawTri(11, 12, 23, 0.4); drawTri(12, 23, 24, 0.4);
+            // Malla para hombros y cuello
+            drawTri(11, 12, 0, 0.2); 
+            // Brazos (conectamos hombros, codos y muñecas con puntos intermedios calculados)
+            drawTri(12, 14, 16, 0.3); // Brazo derecho
+            drawTri(11, 13, 15, 0.3); // Brazo izquierdo
+            // Caderas a rodillas (si son visibles)
+            drawTri(23, 24, 25, 0.2); drawTri(24, 25, 26, 0.2);
         }
 
         function onResults(results) {
             canvasCapture.width = canvasAvatar.width = videoElement.videoWidth;
             canvasCapture.height = canvasAvatar.height = videoElement.videoHeight;
 
-            // 1. Dibujo Cámara con filtro oscuro
+            // 1. Vista Real (Oscurecida para estilo tecnológico)
             ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
-            ctxCap.fillStyle = "rgba(0,0,0,0.4)";
-            ctxCap.fillRect(0,0, canvasCapture.width, canvasCapture.height);
+            ctxCap.fillStyle = "rgba(0, 0, 0, 0.5)";
+            ctxCap.fillRect(0, 0, canvasCapture.width, canvasCapture.height);
 
-            // 2. Dibujo Avatar (Fondo Negro para máximo contraste)
+            // 2. Render de Avatar Mesh
             ctxAva.save();
-            ctxAva.fillStyle = "#000000"; 
+            ctxAva.fillStyle = "#000"; 
             ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
             
-            ctxAva.shadowBlur = 10;
+            ctxAva.shadowBlur = 12;
             ctxAva.shadowColor = "#00FFFF";
 
-            // CARA (Malla densa)
+            // MALLA FACIAL (Completa)
             if (results.faceLandmarks) {
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_TESSELATION, {color: "rgba(0, 255, 255, 0.3)", lineWidth: 0.5});
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_FACE_OVAL, {color: "#00FFFF", lineWidth: 1});
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_TESSELATION, {color: "rgba(255, 255, 255, 0.25)", lineWidth: 0.5});
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_FACE_OVAL, {color: "#00FFFF", lineWidth: 1.2});
+                // Detalles de ojos y boca
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LIPS, {color: "#fff", lineWidth: 1});
             }
 
-            // CUERPO (Efecto de red volumétrica)
+            // MALLA DE CUERPO (Efecto Wireframe Completo)
             if (results.poseLandmarks) {
-                drawFullMesh(ctxAva, results.poseLandmarks, canvasAvatar.width, canvasAvatar.height);
-                // Conectores base refinados
+                drawComplexBodyMesh(ctxAva, results.poseLandmarks, canvasAvatar.width, canvasAvatar.height);
                 drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: "#00FFFF", lineWidth: 1.5});
             }
 
-            // MANOS (Malla técnica)
-            const handStyle = { color: '#FFFFFF', lineWidth: 1 };
+            // MALLA DE MANOS (Densa)
+            const handStyle = { color: 'rgba(0, 255, 255, 0.5)', lineWidth: 0.8 };
             if (results.rightHandLandmarks) {
                 drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, handStyle);
-                drawLandmarks(ctxAva, results.rightHandLandmarks, {color: '#00FFFF', radius: 1});
+                drawLandmarks(ctxAva, results.rightHandLandmarks, {color: '#00FFFF', radius: 1, lineWidth: 1});
             }
             if (results.leftHandLandmarks) {
                 drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, handStyle);
-                drawLandmarks(ctxAva, results.leftHandLandmarks, {color: '#00FFFF', radius: 1});
+                drawLandmarks(ctxAva, results.leftHandLandmarks, {color: '#00FFFF', radius: 1, lineWidth: 1});
             }
 
             ctxAva.restore();
         }
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, refineFaceLandmarks: true, minDetectionConfidence: 0.5 });
+        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, refineFaceLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
         holistic.onResults(onResults);
 
         const camera = new Camera(videoElement, {
