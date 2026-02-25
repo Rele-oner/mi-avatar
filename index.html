@@ -2,102 +2,123 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>AI Avatar - Ultra 3D Mesh</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Avatar - Ultimate Mesh Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <style>
-        body { margin: 0; background: #000; color: #00ffcc; font-family: 'Courier New', monospace; overflow: hidden; }
-        .container { display: flex; width: 100vw; height: 100vh; }
-        .view { flex: 1; position: relative; border: 1px solid #333; }
-        video { position: absolute; width: 100%; height: 100%; object-fit: cover; opacity: 0.3; transform: rotateY(180deg); }
-        canvas { width: 100%; height: 100%; }
-        .label { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 5px; z-index: 10; font-size: 12px; }
+        body { font-family: 'Courier New', monospace; background: #000; color: #00ffcc; margin: 0; display: flex; flex-direction: column; align-items: center; overflow: hidden; }
+        .header { padding: 10px; text-align: center; width: 100%; border-bottom: 1px solid #1a1a1a; background: #050505; }
+        .main-view { display: flex; justify-content: center; align-items: center; width: 100vw; height: 85vh; gap: 10px; padding: 10px; }
+        .view-box { position: relative; flex: 1; background: #000; border: 1px solid #333; border-radius: 4px; overflow: hidden; height: 100%; display: flex; justify-content: center; align-items: center; }
+        video { display: none; }
+        canvas { max-width: 100%; max-height: 100%; transform: rotateY(180deg); }
+        .label { position: absolute; top: 10px; left: 10px; background: rgba(0, 0, 0, 0.8); padding: 4px 8px; border: 1px solid #00ffcc; font-size: 10px; z-index: 5; color: #00ffcc; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="view">
-        <div class="label">ENTRADA REAL</div>
-        <video id="input_video"></video>
+    <div class="header">
+        <h2 style="margin:0; font-size: 18px; letter-spacing: 2px;">SISTEMA DE CAPTURA - ULTIMATE MESH</h2>
     </div>
-    <div class="view" id="three_container">
-        <div class="label">AVATAR 3D WIREFRAME</div>
+
+    <div class="main-view">
+        <div class="view-box">
+            <div class="label">Input_Stream</div>
+            <video id="webcam"></video>
+            <canvas id="canvas_capture"></canvas>
+        </div>
+        <div class="view-box">
+            <div class="label">Avatar_Mesh_Render</div>
+            <canvas id="canvas_avatar"></canvas>
+        </div>
     </div>
-</div>
 
-<script type="module">
-    const videoElement = document.getElementById('input_video');
-    const container = document.getElementById('three_container');
+    <script type="module">
+        const videoElement = document.getElementById('webcam');
+        const canvasCapture = document.getElementById('canvas_capture');
+        const canvasAvatar = document.getElementById('canvas_avatar');
+        const ctxCap = canvasCapture.getContext('2d');
+        const ctxAva = canvasAvatar.getContext('2d');
 
-    // --- CONFIGURACIÓN THREE.JS (ESCENA 3D) ---
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    container.appendChild(renderer.domElement);
+        function drawFullMesh(ctx, landmarks, w, h) {
+            const drawTriangle = (p1, p2, p3, color = "rgba(0, 255, 255, 0.2)") => {
+                ctx.beginPath();
+                ctx.moveTo(p1.x * w, p1.y * h);
+                ctx.lineTo(p2.x * w, p2.y * h);
+                ctx.lineTo(p3.x * w, p3.y * h);
+                ctx.closePath();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 0.5;
+                ctx.stroke();
+            };
 
-    // Material de malla (Wireframe) estilo neón
-    const material = new THREE.MeshBasicMaterial({ 
-        color: 0x00ffff, 
-        wireframe: true, 
-        transparent: true, 
-        opacity: 0.8 
-    });
+            // Mallado de Torso y Brazos (Conectamos puntos para crear "volumen")
+            if (landmarks[11] && landmarks[12] && landmarks[23] && landmarks[24]) {
+                // Pecho
+                drawTriangle(landmarks[11], landmarks[12], landmarks[14]); // Hombro-Hombro-Codo
+                drawTriangle(landmarks[12], landmarks[11], landmarks[13]); 
+                // Abdomen
+                drawTriangle(landmarks[11], landmarks[23], landmarks[24]);
+                drawTriangle(landmarks[11], landmarks[12], landmarks[24]);
+            }
+        }
 
-    // Creamos partes del cuerpo con volúmenes 3D reales
-    const createPart = (geo) => new THREE.Mesh(geo, material);
-    const head = createPart(new THREE.IcosahedronGeometry(0.25, 3));
-    const torso = createPart(new THREE.CylinderGeometry(0.3, 0.2, 0.7, 8));
-    const lArm = createPart(new THREE.CylinderGeometry(0.08, 0.08, 0.6, 6));
-    const rArm = createPart(new THREE.CylinderGeometry(0.08, 0.08, 0.6, 6));
-    
-    scene.add(head, torso, lArm, rArm);
-    camera.position.z = 2;
+        function onResults(results) {
+            canvasCapture.width = canvasAvatar.width = videoElement.videoWidth;
+            canvasCapture.height = canvasAvatar.height = videoElement.videoHeight;
 
-    function onResults(results) {
-        if (!results.poseLandmarks) return;
+            // 1. Dibujo Cámara con filtro oscuro
+            ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
+            ctxCap.fillStyle = "rgba(0,0,0,0.4)";
+            ctxCap.fillRect(0,0, canvasCapture.width, canvasCapture.height);
 
-        const landmarks = results.poseLandmarks;
+            // 2. Dibujo Avatar (Fondo Negro para máximo contraste)
+            ctxAva.save();
+            ctxAva.fillStyle = "#000000"; 
+            ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
+            
+            ctxAva.shadowBlur = 10;
+            ctxAva.shadowColor = "#00FFFF";
 
-        // Mapeo de movimiento de MediaPipe a coordenadas 3D de Three.js
-        const to3D = (lm) => ({
-            x: (lm.x - 0.5) * 2,
-            y: -(lm.y - 0.5) * 2,
-            z: -lm.z
+            // CARA (Malla densa)
+            if (results.faceLandmarks) {
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_TESSELATION, {color: "rgba(0, 255, 255, 0.3)", lineWidth: 0.5});
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_FACE_OVAL, {color: "#00FFFF", lineWidth: 1});
+            }
+
+            // CUERPO (Efecto de red volumétrica)
+            if (results.poseLandmarks) {
+                drawFullMesh(ctxAva, results.poseLandmarks, canvasAvatar.width, canvasAvatar.height);
+                // Conectores base refinados
+                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: "#00FFFF", lineWidth: 1.5});
+            }
+
+            // MANOS (Malla técnica)
+            const handStyle = { color: '#FFFFFF', lineWidth: 1 };
+            if (results.rightHandLandmarks) {
+                drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, handStyle);
+                drawLandmarks(ctxAva, results.rightHandLandmarks, {color: '#00FFFF', radius: 1});
+            }
+            if (results.leftHandLandmarks) {
+                drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, handStyle);
+                drawLandmarks(ctxAva, results.leftHandLandmarks, {color: '#00FFFF', radius: 1});
+            }
+
+            ctxAva.restore();
+        }
+
+        const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
+        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, refineFaceLandmarks: true, minDetectionConfidence: 0.5 });
+        holistic.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await holistic.send({image: videoElement}); },
+            width: 640, height: 480
         });
-
-        // 1. Posicionar Cabeza
-        const nose = to3D(landmarks[0]);
-        head.position.set(nose.x, nose.y, nose.z);
-
-        // 2. Posicionar Torso
-        const lShoulder = to3D(landmarks[11]);
-        const rShoulder = to3D(landmarks[12]);
-        torso.position.set((lShoulder.x + rShoulder.x)/2, (lShoulder.y - 0.35), 0);
-
-        // 3. Brazo Derecho (Malla conectada hombro-codo)
-        const rElbow = to3D(landmarks[14]);
-        rArm.position.set((rShoulder.x + rElbow.x)/2, (rShoulder.y + rElbow.y)/2, 0);
-        rArm.lookAt(rElbow.x, rElbow.y, 0);
-        rArm.rotation.x += Math.PI / 2;
-
-        renderer.render(scene, camera);
-    }
-
-    // --- CONFIGURACIÓN MEDIAPIPE ---
-    const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
-    holistic.onResults(onResults);
-
-    const cam = new Camera(videoElement, {
-        onFrame: async () => { await holistic.send({image: videoElement}); },
-        width: 640, height: 480
-    });
-    cam.start();
-</script>
-
+        camera.start();
+    </script>
 </body>
 </html>
