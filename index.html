@@ -2,93 +2,92 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>AI Avatar - Core Mesh Professional</title>
+    <title>AI Avatar - Ultra Precision Mesh</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
-        .app-container { display: flex; width: 100vw; height: 100vh; padding: 10px; box-sizing: border-box; gap: 10px; }
-        .panel { flex: 1; position: relative; border: 1px solid #1a1a1a; background: #050505; border-radius: 12px; }
+        .main-container { display: flex; width: 100vw; height: 100vh; padding: 15px; box-sizing: border-box; gap: 15px; }
+        .viewport { flex: 1; position: relative; border: 1px solid #1a1a1a; background: #050505; border-radius: 10px; overflow: hidden; }
         canvas { width: 100%; height: 100%; transform: rotateY(180deg); object-fit: contain; }
         video { display: none; }
-        .overlay-text { position: absolute; top: 15px; left: 15px; color: #00ffcc; font-size: 10px; background: rgba(0,0,0,0.8); padding: 5px 10px; border: 1px solid #00ffcc; border-radius: 4px; z-index: 10; letter-spacing: 2px; }
+        .label { position: absolute; top: 12px; left: 12px; color: #00ffcc; font-size: 10px; background: rgba(0,0,0,0.8); padding: 4px 8px; border: 1px solid #00ffcc; z-index: 10; letter-spacing: 1px; }
     </style>
 </head>
 <body>
-    <div class="app-container">
-        <div class="panel">
-            <div class="overlay-text">NEURAL_LINK_ACTIVE</div>
-            <video id="webcam"></video>
-            <canvas id="canvas_src"></canvas>
-        </div>
-        <div class="panel">
-            <div class="overlay-text">CORE_MESH_V7_FINAL</div>
-            <canvas id="canvas_avatar"></canvas>
-        </div>
+    <div class="main-container">
+        <div class="viewport"><div class="label">INPUT_STREAM</div><video id="v"></video><canvas id="c1"></canvas></div>
+        <div class="viewport"><div class="label">MASTER_CORE_MESH_v8</div><canvas id="c2"></canvas></div>
     </div>
 
 <script type="module">
-    const video = document.getElementById('webcam');
-    const ctxSrc = document.getElementById('canvas_src').getContext('2d');
-    const ctxAva = document.getElementById('canvas_avatar').getContext('2d');
+    const video = document.getElementById('v');
+    const ctxSrc = document.getElementById('c1').getContext('2d');
+    const ctxOut = document.getElementById('c2').getContext('2d');
 
-    // Función para crear una red de triángulos en extremidades y torso
-    function drawMeshSurface(ctx, lm, p1, p2, p3, p4, w, h) {
-        if (!lm[p1] || !lm[p2] || !lm[p3]) return;
-        ctx.beginPath();
-        ctx.moveTo(lm[p1].x * w, lm[p1].y * h);
-        ctx.lineTo(lm[p2].x * w, lm[p2].y * h);
-        ctx.lineTo(lm[p3].x * w, lm[p3].y * h);
-        if(p4) ctx.lineTo(lm[p4].x * w, lm[p4].y * h);
-        ctx.closePath();
-        ctx.strokeStyle = "rgba(0, 255, 204, 0.4)";
-        ctx.lineWidth = 0.5;
-        ctx.stroke();
+    // Función para crear una superficie de malla en el cuerpo
+    function drawBodyVolume(ctx, lm, w, h) {
+        ctx.lineWidth = 0.6;
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.3)";
         
-        // Efecto de relleno sutil para dar masa
-        ctx.fillStyle = "rgba(0, 255, 204, 0.05)";
-        ctx.fill();
+        const connect = (a, b, c) => {
+            if (!lm[a] || !lm[b] || !lm[c]) return;
+            ctx.beginPath();
+            ctx.moveTo(lm[a].x * w, lm[a].y * h);
+            ctx.lineTo(lm[b].x * w, lm[b].y * h);
+            ctx.lineTo(lm[c].x * w, lm[c].y * h);
+            ctx.closePath();
+            ctx.stroke();
+        };
+
+        // Tejido del Torso (Triangulación de pecho y espalda)
+        connect(11, 12, 24); connect(11, 23, 24); 
+        // Tejido de Brazos (Dando grosor al antebrazo y brazo)
+        connect(11, 13, 12); connect(12, 14, 11);
+        connect(13, 15, 14); connect(14, 16, 13);
     }
 
     function onResults(res) {
-        const w = ctxSrc.canvas.width = ctxAva.canvas.width = video.videoWidth;
-        const h = ctxSrc.canvas.height = ctxAva.canvas.height = video.videoHeight;
+        const w = ctxSrc.canvas.width = ctxOut.canvas.width = video.videoWidth;
+        const h = ctxSrc.canvas.height = ctxOut.canvas.height = video.videoHeight;
 
         ctxSrc.drawImage(res.image, 0, 0);
-        ctxAva.fillStyle = "#000";
-        ctxAva.fillRect(0, 0, w, h);
+        ctxOut.fillStyle = "#000"; ctxOut.fillRect(0, 0, w, h);
 
-        ctxAva.save();
-        ctxAva.shadowBlur = 10; ctxAva.shadowColor = "#00ffcc";
+        ctxOut.save();
+        ctxOut.shadowBlur = 8; ctxOut.shadowColor = "#00ffcc";
 
-        // 1. CARA: MALLA PURA (Sin líneas de ojos/labios duplicadas)
+        // 1. CARA: MALLA GEOMÉTRICA LIMPIA (Sin líneas de ojos/boca)
         if (res.faceLandmarks) {
-            // Solo dibujamos la teselación (la malla de triángulos interna)
-            drawConnectors(ctxAva, res.faceLandmarks, FACEMESH_TESSELATION, {color: "rgba(0, 255, 204, 0.2)", lineWidth: 0.5});
-            // El óvalo le da la forma sólida a la cara
-            drawConnectors(ctxAva, res.faceLandmarks, FACEMESH_FACE_OVAL, {color: "rgba(0, 255, 204, 0.8)", lineWidth: 1});
+            // Dibujamos SOLO la malla de triangulación general
+            drawConnectors(ctxOut, res.faceLandmarks, FACEMESH_TESSELATION, {
+                color: "rgba(0, 255, 204, 0.25)", 
+                lineWidth: 0.4
+            });
+            // Definimos el contorno para dar solidez
+            drawConnectors(ctxOut, res.faceLandmarks, FACEMESH_FACE_OVAL, {
+                color: "rgba(0, 255, 204, 0.7)", 
+                lineWidth: 1
+            });
         }
 
-        // 2. CUERPO: GENERACIÓN DE SUPERFICIE
+        // 2. CUERPO: MALLA DE VOLUMEN SUBDIVIDIDA
         if (res.poseLandmarks) {
-            const lm = res.poseLandmarks;
-            // Tejemos el torso (Hombros a Caderas)
-            drawMeshSurface(ctxAva, lm, 11, 12, 24, 23, w, h);
-            // Tejemos brazos
-            drawMeshSurface(ctxAva, lm, 11, 13, 15, null, w, h); // Brazo Izq
-            drawMeshSurface(ctxAva, lm, 12, 14, 16, null, w, h); // Brazo Der
-            
-            // Líneas de conexión principal (Esqueleto)
-            drawConnectors(ctxAva, lm, POSE_CONNECTIONS, {color: "#00ffcc", lineWidth: 1.5});
+            drawBodyVolume(ctxOut, res.poseLandmarks, w, h);
+            // Estructura principal
+            drawConnectors(ctxOut, res.poseLandmarks, POSE_CONNECTIONS, {
+                color: "#00ffcc", 
+                lineWidth: 1.2
+            });
         }
 
-        // 3. MANOS: WIREFRAME LIMPIO
-        const handStyle = {color: "rgba(255, 255, 255, 0.6)", lineWidth: 1};
-        if (res.rightHandLandmarks) drawConnectors(ctxAva, res.rightHandLandmarks, HAND_CONNECTIONS, handStyle);
-        if (res.leftHandLandmarks) drawConnectors(ctxAva, res.leftHandLandmarks, HAND_CONNECTIONS, handStyle);
+        // 3. MANOS: WIREFRAME DETALLADO
+        const handStyle = { color: "rgba(255, 255, 255, 0.5)", lineWidth: 0.8 };
+        if (res.leftHandLandmarks) drawConnectors(ctxOut, res.leftHandLandmarks, HAND_CONNECTIONS, handStyle);
+        if (res.rightHandLandmarks) drawConnectors(ctxOut, res.rightHandLandmarks, HAND_CONNECTIONS, handStyle);
 
-        ctxAva.restore();
+        ctxOut.restore();
     }
 
     const holistic = new Holistic({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
