@@ -1,106 +1,81 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>AI Avatar - Hyper-Density Surface v9</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <meta charset="utf-8">
+    <title>AI Avatar - Engine X (Stable)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
-        .grid-container { display: flex; width: 100vw; height: 100vh; padding: 10px; gap: 10px; box-sizing: border-box; }
-        .view { flex: 1; position: relative; border: 1px solid #1a1a1a; background: #020202; border-radius: 12px; }
-        canvas { width: 100%; height: 100%; transform: rotateY(180deg); object-fit: contain; }
+        body { margin: 0; background: #000; overflow: hidden; }
+        .container { display: flex; width: 100vw; height: 100vh; }
+        canvas, video { flex: 1; height: 100%; object-fit: contain; transform: rotateY(180deg); }
         video { display: none; }
-        .status { position: absolute; top: 15px; left: 15px; color: #00ffcc; font-size: 9px; background: rgba(0,0,0,0.8); padding: 5px 10px; border: 1px solid #00ffcc; z-index: 10; letter-spacing: 2px; }
+        #canvas_out { background: #000; border-left: 1px solid #00ffcc; }
     </style>
 </head>
 <body>
-    <div class="grid-container">
-        <div class="view"><div class="status">NEURAL_FEED_SRC</div><video id="v"></video><canvas id="c1"></canvas></div>
-        <div class="view"><div class="status">HYPER_DENSITY_MESH_v9</div><canvas id="c2"></canvas></div>
+    <div class="container">
+        <video id="input_video"></video>
+        <canvas id="canvas_out"></canvas>
     </div>
 
 <script type="module">
-    const video = document.getElementById('v');
-    const ctx1 = document.getElementById('c1').getContext('2d');
-    const ctx2 = document.getElementById('c2').getContext('2d');
+    const videoElement = document.getElementById('input_video');
+    const canvasElement = document.getElementById('canvas_out');
+    const canvasCtx = canvasElement.getContext('2d');
 
-    // MOTOR DE SUBDIVISIÓN: Crea una malla densa entre 4 puntos (Torso/Brazos)
-    function drawHyperSurface(ctx, lm, p1, p2, p3, p4, w, h, density = 4) {
-        if (!lm[p1] || !lm[p2] || !lm[p3] || !lm[p4]) return;
+    function onResults(results) {
+        canvasElement.width = videoElement.videoWidth;
+        canvasElement.height = videoElement.videoHeight;
         
-        ctx.strokeStyle = "rgba(0, 255, 204, 0.25)";
-        ctx.lineWidth = 0.4;
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        
+        // Fondo negro sólido
+        canvasCtx.fillStyle = '#000';
+        canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
 
-        for (let i = 0; i <= density; i++) {
-            const t = i / density;
-            // Interpolación horizontal
-            const xTop = lm[p1].x + (lm[p2].x - lm[p1].x) * t;
-            const yTop = lm[p1].y + (lm[p2].y - lm[p1].y) * t;
-            const xBot = lm[p3].x + (lm[p4].x - lm[p3].x) * t;
-            const yBot = lm[p3].y + (lm[p4].y - lm[p3].y) * t;
-
-            ctx.beginPath();
-            ctx.moveTo(xTop * w, yTop * h);
-            ctx.lineTo(xBot * w, yBot * h);
-            ctx.stroke();
-
-            // Interpolación vertical (Crea el efecto de rejilla/grid)
-            const xL = lm[p1].x + (lm[p3].x - lm[p1].x) * t;
-            const yL = lm[p1].y + (lm[p3].y - lm[p1].y) * t;
-            const xR = lm[p2].x + (lm[p4].x - lm[p2].x) * t;
-            const yR = lm[p2].y + (lm[p4].y - lm[p2].y) * t;
-
-            ctx.beginPath();
-            ctx.moveTo(xL * w, yL * h);
-            ctx.lineTo(xR * w, yR * h);
-            ctx.stroke();
+        // Renderizado de Cara (Modo Escultura)
+        if (results.faceLandmarks) {
+            canvasCtx.strokeStyle = "rgba(0, 255, 204, 0.3)";
+            canvasCtx.lineWidth = 0.5;
+            // Dibujamos solo conexiones esenciales para no saturar
+            for (const connection of FACEMESH_TESSELATION) {
+                const start = results.faceLandmarks[connection[0]];
+                const end = results.faceLandmarks[connection[1]];
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(start.x * canvasElement.width, start.y * canvasElement.height);
+                canvasCtx.lineTo(end.x * canvasElement.width, end.height * canvasElement.height);
+                canvasCtx.stroke();
+            }
         }
+
+        // Renderizado de Cuerpo (Malla Estable)
+        if (results.poseLandmarks) {
+            canvasCtx.strokeStyle = "#00ffcc";
+            canvasCtx.lineWidth = 2;
+            // Conexiones de pose estándar (seguro y rápido)
+            for (const connection of POSE_CONNECTIONS) {
+                const start = results.poseLandmarks[connection[0]];
+                const end = results.poseLandmarks[connection[1]];
+                canvasCtx.beginPath();
+                canvasCtx.moveTo(start.x * canvasElement.width, start.y * canvasElement.height);
+                canvasCtx.lineTo(end.x * canvasElement.width, end.height * canvasElement.height);
+                canvasCtx.stroke();
+            }
+        }
+        canvasCtx.restore();
     }
 
-    function onResults(res) {
-        const w = ctx1.canvas.width = ctx2.canvas.width = video.videoWidth;
-        const h = ctx1.canvas.height = ctx2.canvas.height = video.videoHeight;
-
-        ctx1.drawImage(res.image, 0, 0);
-        ctx2.fillStyle = "#000"; ctx2.fillRect(0, 0, w, h);
-
-        ctx2.save();
-        ctx2.shadowBlur = 12; ctx2.shadowColor = "#00ffcc";
-
-        // 1. CARA TIPO ESCULTURA (v9: Malla interna reforzada)
-        if (res.faceLandmarks) {
-            drawConnectors(ctx2, res.faceLandmarks, FACEMESH_TESSELATION, {color: "rgba(0, 255, 204, 0.2)", lineWidth: 0.3});
-            drawConnectors(ctx2, res.faceLandmarks, FACEMESH_FACE_OVAL, {color: "#00ffcc", lineWidth: 1.2});
-        }
-
-        // 2. CUERPO: INTEGRACIÓN DE SUPERFICIE DE ALTA DENSIDAD
-        if (res.poseLandmarks) {
-            const lm = res.poseLandmarks;
-            // Torso principal (Rejilla 6x6)
-            drawHyperSurface(ctx2, lm, 11, 12, 23, 24, w, h, 6);
-            // Brazo Izquierdo (Hombro-Codo-Muñeca)
-            drawHyperSurface(ctx2, lm, 11, 11, 13, 13, w, h, 3); // Hombro a Codo
-            drawHyperSurface(ctx2, lm, 13, 13, 15, 15, w, h, 3); // Codo a Muñeca
-            // Brazo Derecho
-            drawHyperSurface(ctx2, lm, 12, 12, 14, 14, w, h, 3);
-            drawHyperSurface(ctx2, lm, 14, 14, 16, 16, w, h, 3);
-        }
-
-        // 3. MANOS: WIREFRAME NEÓN
-        const hStyle = {color: "rgba(255, 255, 255, 0.7)", lineWidth: 1};
-        if (res.leftHandLandmarks) drawConnectors(ctx2, res.leftHandLandmarks, HAND_CONNECTIONS, hStyle);
-        if (res.rightHandLandmarks) drawConnectors(ctx2, res.rightHandLandmarks, HAND_CONNECTIONS, hStyle);
-
-        ctx2.restore();
-    }
-
-    const holistic = new Holistic({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
-    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, refineFaceLandmarks: true, minDetectionConfidence: 0.7 });
+    const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
+    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
     holistic.onResults(onResults);
 
-    const cam = new Camera(video, { onFrame: async () => { await holistic.send({image: video}); }, width: 640, height: 480 });
-    cam.start();
+    const camera = new Camera(videoElement, {
+        onFrame: async () => { await holistic.send({image: videoElement}); },
+        width: 640, height: 480
+    });
+    camera.start();
 </script>
 </body>
 </html>
