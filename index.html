@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Avatar Mirror - Green Screen Edition</title>
+    <title>AI Avatar Mirror - Mesh Edition</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -39,7 +39,7 @@
 <body>
 
     <div class="header">
-        <h2>SISTEMA DE CAPTURA - GREEN SCREEN MODE</h2>
+        <h2>SISTEMA DE CAPTURA - MESH MODE</h2>
     </div>
 
     <div class="main-view">
@@ -75,38 +75,48 @@
 
             // 2. DIBUJO AVATAR SOBRE FONDO VERDE
             ctxAva.save();
-            // FONDO VERDE PURO (Chroma Key)
             ctxAva.fillStyle = "#00FF00"; 
             ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
 
+            // --- CONFIGURACIÓN DE ESTILO ---
+            const meshColor = '#FFFFFF';
+            const meshWidth = 0.5; // Líneas finas para que parezca una malla real
+            ctxAva.shadowBlur = 5;
+            ctxAva.shadowColor = "#00FFFF";
+
+            // CUERPO (BRAZOS Y TRONCO)
             if (results.poseLandmarks) {
-                // Brillo Neón para contraste sobre verde
-                ctxAva.shadowBlur = 15;
-                ctxAva.shadowColor = "#00FFFF";
-                
-                // Cuerpo en Blanco/Cian para que resalte
-                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#FFFFFF', lineWidth: 4});
+                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {
+                    color: meshColor, 
+                    lineWidth: 2
+                });
             }
 
+            // CARA (MALLA COMPLETA - TESSELATION)
             if (results.faceLandmarks) {
-                // Rostro y Expresión
-                ctxAva.shadowColor = "#00FFFF";
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_FACE_OVAL, {color: '#FFFFFF', lineWidth: 1});
+                // Dibujamos la malla de toda la cara
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_TESSELATION, {
+                    color: '#BBBBBB', 
+                    lineWidth: 0.5
+                });
+                // Contorno y detalles principales
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_FACE_OVAL, {color: meshColor, lineWidth: 1});
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LIPS, {color: meshColor, lineWidth: 1});
                 
-                // Ojos Azules Eléctricos (Iris)
+                // Ojos destacados
                 ctxAva.shadowColor = "#0055FF";
                 drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LEFT_IRIS, {color: '#00D9FF', lineWidth: 2});
                 drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_RIGHT_IRIS, {color: '#00D9FF', lineWidth: 2});
-                
-                // Boca (Blanco con brillo azul)
-                ctxAva.shadowColor = "#00FFFF";
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LIPS, {color: '#FFFFFF', lineWidth: 2});
             }
 
-            if (results.rightHandLandmarks || results.leftHandLandmarks) {
-                ctxAva.shadowColor = "#00FFFF";
-                if(results.rightHandLandmarks) drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 2});
-                if(results.leftHandLandmarks) drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#FFFFFF', lineWidth: 2});
+            // MANOS (MALLA DE DEDOS)
+            if (results.rightHandLandmarks) {
+                drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: meshColor, lineWidth: 1.5});
+                drawLandmarks(ctxAva, results.rightHandLandmarks, {color: '#00FFFF', lineWidth: 1, radius: 2});
+            }
+            if (results.leftHandLandmarks) {
+                drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: meshColor, lineWidth: 1.5});
+                drawLandmarks(ctxAva, results.leftHandLandmarks, {color: '#00FFFF', lineWidth: 1, radius: 2});
             }
 
             ctxAva.restore();
