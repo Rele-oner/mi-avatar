@@ -2,80 +2,130 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - Hyper-Mesh 3D Engine</title>
+    <title>AI Avatar - Core Mesh Precision</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
-        #container { display: flex; width: 100vw; height: 100vh; }
-        .view { flex: 1; border: 1px solid #222; position: relative; }
-        video { position: absolute; width: 100%; height: 100%; object-fit: cover; opacity: 0.2; transform: rotateY(180deg); }
-        .label { position: absolute; top: 10px; left: 10px; color: #00ffcc; z-index: 10; font-size: 12px; background: rgba(0,0,0,0.7); padding: 5px; border: 1px solid #00ffcc; }
+        body { margin: 0; background: #000; color: #00ffcc; font-family: 'Courier New', monospace; }
+        .main { display: flex; width: 100vw; height: 100vh; padding: 10px; box-sizing: border-box; gap: 10px; }
+        .box { flex: 1; position: relative; border: 1px solid #1a1a1a; background: #050505; border-radius: 8px; overflow: hidden; }
+        canvas { width: 100%; height: 100%; transform: rotateY(180deg); object-fit: contain; }
+        video { display: none; }
+        .tag { position: absolute; top: 10px; left: 10px; background: rgba(0,255,204,0.1); padding: 4px 8px; border-left: 2px solid #00ffcc; font-size: 10px; }
     </style>
 </head>
 <body>
-    <div id="container">
-        <div class="view"><div class="label">INPUT_STREAM</div><video id="input_video"></video></div>
-        <div class="view" id="three_view"><div class="label">3D_MESH_RENDER_v6</div></div>
+    <div class="main">
+        <div class="box"><div class="tag">NEURAL_INPUT</div><video id="v"></video><canvas id="c1"></canvas></div>
+        <div class="box"><div class="tag">MASTER_MESH_RENDER</div><canvas id="c2"></canvas></div>
     </div>
 
-<script>
-    const videoElement = document.getElementById('input_video');
-    const container = document.getElementById('three_view');
+<script type="module">
+    const video = document.getElementById('v');
+    const ctx1 = document.getElementById('c1').getContext('2d');
+    const ctx2 = document.getElementById('c2').getContext('2d');
 
-    // --- CONFIGURACIÓN THREE.JS ---
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    container.appendChild(renderer.domElement);
+    // Función de Mallado de Alta Densidad para el Cuerpo
+    function drawBodySkin(ctx, lm, w, h) {
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.4)";
+        ctx.lineWidth = 0.5;
 
-    const material = new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true, transparent: true, opacity: 0.6 });
+        const drawTri = (p1, p2, p3) => {
+            if (!lm[p1] || !lm[p2] || !lm[p3]) return;
+            ctx.beginPath();
+            ctx.moveTo(lm[p1].x * w, lm[p1].y * h);
+            ctx.lineTo(lm[p2].x * w, lm[p2].y * h);
+            ctx.lineTo(lm[p3].x * w, lm[p3].y * h);
+            ctx.closePath();
+            ctx.stroke();
+        };
 
-    // Creamos las partes del cuerpo como volúmenes
-    const parts = {
-        head: new THREE.Mesh(new THREE.IcosahedronGeometry(0.2, 2), material),
-        torso: new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.2, 0.6, 8), material),
-        lArm: new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 6), material),
-        rArm: new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 6), material)
-    };
-
-    Object.values(parts).forEach(p => scene.add(p));
-    camera.position.z = 2;
-
-    function onResults(results) {
-        if (!results.poseLandmarks) return;
-        const lm = results.poseLandmarks;
-
-        // Función para convertir MediaPipe a espacio 3D
-        const to3D = (pt) => ({ x: (pt.x - 0.5) * 2.5, y: -(pt.y - 0.5) * 2.5, z: -pt.z * 2 });
-
-        // Posicionar Cabeza
-        const n = to3D(lm[0]);
-        parts.head.position.set(n.x, n.y, n.z);
-
-        // Posicionar Torso (entre hombros y cadera)
-        const sL = to3D(lm[11]), sR = to3D(lm[12]);
-        parts.torso.position.set((sL.x + sR.x)/2, sL.y - 0.3, 0);
-
-        // Brazo Derecho (Cilindro que mira al codo)
-        const eR = to3D(lm[14]);
-        const armVec = new THREE.Vector3(eR.x - sR.x, eR.y - sR.y, eR.z - sR.z);
-        parts.rArm.position.set(sR.x + armVec.x/2, sR.y + armVec.y/2, sR.z + armVec.z/2);
-        parts.rArm.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), armVec.clone().normalize());
-
-        renderer.render(scene, camera);
+        // Tejido del Torso (Crea una red densa tipo armadura)
+        drawTri(11, 12, 23); drawTri(12, 23, 24);
+        drawTri(11, 23, 13); drawTri(12, 24, 14);
+        // Brazos (Cerramos el volumen)
+        drawTri(13, 15, 11); drawTri(14, 16, 12);
+        
+        // Puntos de conexión "Neural" entre cara y hombros
+        ctx.beginPath();
+        ctx.moveTo(lm[11].x * w, lm[11].y * h);
+        ctx.lineTo(w/2, (lm[11].y + lm[12].y)/2 * h - 50); // Punto virtual cuello
+        ctx.lineTo(lm[12].x * w, lm[12].y * h);
+        ctx.stroke();
     }
 
-    const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6 });
+    function onResults(res) {
+        const w = ctx1.canvas.width = ctx2.canvas.width = video.videoWidth;
+        const h = ctx1.canvas.height = ctx2.canvas.height = video.videoHeight;
+
+        ctx1.drawImage(res.image, 0, 0);
+        ctx2.fillStyle = "#000"; ctx2.fillRect(0, 0, w, h);
+
+        ctx2.save();
+        ctx2.shadowBlur = 10; ctx2.shadowColor = "#00ffcc";
+
+        // 1. CARA: MALLA GEOMÉTRICA PURA (Sin líneas de expresión duplicadas)
+        if (res.faceLandmarks) {
+            const facePoints = res.faceLandmarks;
+            // Dibujamos solo el esqueleto de la malla facial
+            for (let i = 0; i < FACEMESH_TESSELATION.length; i++) {
+                const start = facePoints[FACEMESH_TESSELATION[i][0]];
+                const end = facePoints[FACEMESH_TESSELATION[i][1]];
+                ctx2.beginPath();
+                ctx2.moveTo(start.x * w, start.y * h);
+                ctx2.lineTo(end.x * w, end.y * h);
+                ctx2.strokeStyle = "rgba(0, 255, 204, 0.25)";
+                ctx2.lineWidth = 0.3;
+                ctx2.stroke();
+            }
+        }
+
+        // 2. CUERPO: INTEGRACIÓN DE MALLA VOLUMÉTRICA
+        if (res.poseLandmarks) {
+            drawBodySkin(ctx2, res.poseLandmarks, w, h);
+            // Dibujamos las conexiones principales con más fuerza
+            for (let i = 0; i < POSE_CONNECTIONS.length; i++) {
+                const s = res.poseLandmarks[POSE_CONNECTIONS[i][0]];
+                const e = res.poseLandmarks[POSE_CONNECTIONS[i][1]];
+                ctx2.beginPath();
+                ctx2.moveTo(s.x * w, s.y * h);
+                ctx2.lineTo(e.x * w, e.y * h);
+                ctx2.strokeStyle = "#00ffcc";
+                ctx2.lineWidth = 1.2;
+                ctx2.stroke();
+            }
+        }
+
+        // 3. MANOS: WIREFRAME DE PRECISIÓN
+        const drawHand = (hLms) => {
+            if (!hLms) return;
+            for (let i = 0; i < HAND_CONNECTIONS.length; i++) {
+                const s = hLms[HAND_CONNECTIONS[i][0]];
+                const e = hLms[HAND_CONNECTIONS[i][1]];
+                ctx2.beginPath();
+                ctx2.moveTo(s.x * w, s.y * h);
+                ctx2.lineTo(e.x * w, e.y * h);
+                ctx2.strokeStyle = "rgba(255, 255, 255, 0.6)";
+                ctx2.stroke();
+            }
+        };
+        drawHand(res.leftHandLandmarks);
+        drawHand(res.rightHandLandmarks);
+
+        ctx2.restore();
+    }
+
+    // Configuración de motor de alta fidelidad
+    const holistic = new Holistic({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
+    holistic.setOptions({ 
+        modelComplexity: 1, 
+        smoothLandmarks: true, 
+        refineFaceLandmarks: true, 
+        minDetectionConfidence: 0.65 
+    });
     holistic.onResults(onResults);
 
-    const cam = new Camera(videoElement, {
-        onFrame: async () => { await holistic.send({image: videoElement}); },
-        width: 640, height: 480
-    });
+    const cam = new Camera(video, { onFrame: async () => { await holistic.send({image: video}); }, width: 640, height: 480 });
     cam.start();
 </script>
 </body>
