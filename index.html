@@ -3,44 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Avatar Mirror - Mesh Edition</title>
+    <title>AI Avatar - Full Body Mesh</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 
     <style>
-        body { 
-            font-family: 'Courier New', Courier, monospace; 
-            background: #050505; color: #00ffcc; margin: 0; 
-            display: flex; flex-direction: column; align-items: center; 
-        }
+        body { font-family: 'Courier New', monospace; background: #050505; color: #00ffcc; margin: 0; display: flex; flex-direction: column; align-items: center; }
         .header { padding: 10px; text-align: center; width: 100%; border-bottom: 1px solid #333; }
-        .main-view { 
-            display: flex; justify-content: space-around; align-items: center; 
-            width: 95vw; height: 75vh; margin-top: 20px; gap: 20px;
-        }
-        .view-box {
-            position: relative; flex: 1; background: #111; 
-            border: 2px solid #333; border-radius: 10px; overflow: hidden;
-            height: 100%; display: flex; justify-content: center; align-items: center;
-        }
+        .main-view { display: flex; justify-content: space-around; align-items: center; width: 95vw; height: 75vh; margin-top: 20px; gap: 20px; }
+        .view-box { position: relative; flex: 1; background: #111; border: 2px solid #333; border-radius: 10px; overflow: hidden; height: 100%; display: flex; justify-content: center; align-items: center; }
         video { display: none; }
-        canvas { 
-            max-width: 100%; max-height: 100%; 
-            transform: rotateY(180deg);
-        }
-        .label {
-            position: absolute; top: 10px; left: 10px; 
-            background: rgba(0, 0, 0, 0.6); padding: 5px 10px; 
-            border-radius: 5px; font-size: 12px; z-index: 5; color: #fff;
-        }
+        canvas { max-width: 100%; max-height: 100%; transform: rotateY(180deg); }
+        .label { position: absolute; top: 10px; left: 10px; background: rgba(0, 0, 0, 0.6); padding: 5px 10px; border-radius: 5px; font-size: 12px; z-index: 5; color: #fff; }
     </style>
 </head>
 <body>
 
-    <div class="header">
-        <h2>SISTEMA DE CAPTURA - MESH MODE</h2>
-    </div>
+    <div class="header"><h2>SISTEMA DE CAPTURA - FULL MESH BODY</h2></div>
 
     <div class="main-view">
         <div class="view-box">
@@ -61,82 +41,78 @@
         const ctxCap = canvasCapture.getContext('2d');
         const ctxAva = canvasAvatar.getContext('2d');
 
+        // Función para dibujar una "malla" manual entre puntos del cuerpo
+        function drawBodyMesh(ctx, landmarks) {
+            const drawPolygon = (points, color) => {
+                ctx.beginPath();
+                ctx.moveTo(points[0].x * canvasAvatar.width, points[0].y * canvasAvatar.height);
+                for (let i = 1; i < points.length; i++) {
+                    ctx.lineTo(points[i].x * canvasAvatar.width, points[i].y * canvasAvatar.height);
+                }
+                ctx.closePath();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                // Opcional: Rellenar un poco para dar volumen
+                ctx.fillStyle = "rgba(0, 255, 255, 0.05)";
+                ctx.fill();
+            };
+
+            // Torso (Hombros a Caderas)
+            if (landmarks[11] && landmarks[12] && landmarks[23] && landmarks[24]) {
+                drawPolygon([landmarks[11], landmarks[12], landmarks[24], landmarks[23]], "#00FFFF");
+            }
+            // Brazo Derecho
+            if (landmarks[12] && landmarks[14] && landmarks[16]) {
+                drawPolygon([landmarks[12], landmarks[14], landmarks[16]], "#FFFFFF");
+            }
+            // Brazo Izquierdo
+            if (landmarks[11] && landmarks[13] && landmarks[15]) {
+                drawPolygon([landmarks[11], landmarks[13], landmarks[15]], "#FFFFFF");
+            }
+        }
+
         function onResults(results) {
             [canvasCapture, canvasAvatar].forEach(c => {
                 c.width = videoElement.videoWidth;
                 c.height = videoElement.videoHeight;
             });
 
-            // 1. DIBUJO CAPTURA REAL
-            ctxCap.save();
-            ctxCap.clearRect(0, 0, canvasCapture.width, canvasCapture.height);
             ctxCap.drawImage(results.image, 0, 0, canvasCapture.width, canvasCapture.height);
-            ctxCap.restore();
 
-            // 2. DIBUJO AVATAR SOBRE FONDO VERDE
             ctxAva.save();
             ctxAva.fillStyle = "#00FF00"; 
             ctxAva.fillRect(0, 0, canvasAvatar.width, canvasAvatar.height);
 
-            // --- CONFIGURACIÓN DE ESTILO ---
-            const meshColor = '#FFFFFF';
-            const meshWidth = 0.5; // Líneas finas para que parezca una malla real
-            ctxAva.shadowBlur = 5;
-            ctxAva.shadowColor = "#00FFFF";
-
-            // CUERPO (BRAZOS Y TRONCO)
+            // 1. CUERPO COMPLETO (Malla de Torso y extremidades)
             if (results.poseLandmarks) {
-                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {
-                    color: meshColor, 
-                    lineWidth: 2
-                });
+                drawBodyMesh(ctxAva, results.poseLandmarks);
+                drawConnectors(ctxAva, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00FFFF', lineWidth: 2});
             }
 
-            // CARA (MALLA COMPLETA - TESSELATION)
+            // 2. CARA (Malla densa)
             if (results.faceLandmarks) {
-                // Dibujamos la malla de toda la cara
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_TESSELATION, {
-                    color: '#BBBBBB', 
-                    lineWidth: 0.5
-                });
-                // Contorno y detalles principales
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_FACE_OVAL, {color: meshColor, lineWidth: 1});
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LIPS, {color: meshColor, lineWidth: 1});
-                
-                // Ojos destacados
-                ctxAva.shadowColor = "#0055FF";
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LEFT_IRIS, {color: '#00D9FF', lineWidth: 2});
-                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_RIGHT_IRIS, {color: '#00D9FF', lineWidth: 2});
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_TESSELATION, {color: 'rgba(255,255,255,0.3)', lineWidth: 0.5});
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_FACE_OVAL, {color: '#FFFFFF', lineWidth: 1});
+                drawConnectors(ctxAva, results.faceLandmarks, FACEMESH_LIPS, {color: '#FFFFFF', lineWidth: 1});
             }
 
-            // MANOS (MALLA DE DEDOS)
+            // 3. MANOS
             if (results.rightHandLandmarks) {
-                drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: meshColor, lineWidth: 1.5});
-                drawLandmarks(ctxAva, results.rightHandLandmarks, {color: '#00FFFF', lineWidth: 1, radius: 2});
+                drawConnectors(ctxAva, results.rightHandLandmarks, HAND_CONNECTIONS, {color: '#00FFFF', lineWidth: 1.5});
             }
             if (results.leftHandLandmarks) {
-                drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: meshColor, lineWidth: 1.5});
-                drawLandmarks(ctxAva, results.leftHandLandmarks, {color: '#00FFFF', lineWidth: 1, radius: 2});
+                drawConnectors(ctxAva, results.leftHandLandmarks, HAND_CONNECTIONS, {color: '#00FFFF', lineWidth: 1.5});
             }
 
             ctxAva.restore();
         }
 
         const holistic = new Holistic({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`});
-        holistic.setOptions({
-            modelComplexity: 1,
-            smoothLandmarks: true,
-            refineFaceLandmarks: true,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.5
-        });
-
+        holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, refineFaceLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
         holistic.onResults(onResults);
 
-        const camera = new Camera(videoElement, {
-            onFrame: async () => { await holistic.send({image: videoElement}); },
-            width: 640, height: 480
-        });
+        const camera = new Camera(videoElement, { onFrame: async () => { await holistic.send({image: videoElement}); }, width: 640, height: 480 });
         camera.start();
     </script>
 </body>
