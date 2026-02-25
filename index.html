@@ -2,87 +2,87 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - Lite Engine</title>
+    <title>AI Avatar - Core Stability v10</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <style>
-        body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; }
-        .canvas-container { position: relative; width: 90vw; height: 80vh; border: 2px solid #1a1a1a; }
-        canvas { width: 100%; height: 100%; transform: rotateY(180deg); }
+        body { margin: 0; background: #000; overflow: hidden; font-family: sans-serif; }
+        .app-grid { display: flex; width: 100vw; height: 100vh; gap: 5px; padding: 5px; box-sizing: border-box; }
+        .view-panel { flex: 1; position: relative; border: 1px solid #1a1a1a; background: #050505; border-radius: 8px; }
+        canvas { width: 100%; height: 100%; transform: rotateY(180deg); object-fit: contain; }
         video { display: none; }
-        .loader { position: absolute; top: 10px; left: 10px; color: #00ffcc; font-family: monospace; font-size: 12px; }
+        .ui-label { position: absolute; top: 10px; left: 10px; color: #00ffcc; font-size: 10px; background: rgba(0,0,0,0.7); padding: 4px 8px; border-radius: 4px; z-index: 5; }
     </style>
 </head>
 <body>
-    <div class="canvas-container">
-        <div class="loader" id="status">INICIALIZANDO MOTOR...</div>
-        <video id="input_video"></video>
-        <canvas id="output_canvas"></canvas>
+    <div class="app-grid">
+        <div class="view-panel">
+            <div class="ui-label">VIDEO_INPUT</div>
+            <video id="input_v"></video>
+            <canvas id="c_src"></canvas>
+        </div>
+        <div class="view-panel">
+            <div class="ui-label">STABLE_MESH_RENDER</div>
+            <canvas id="c_out"></canvas>
+        </div>
     </div>
 
 <script type="module">
-    const videoElement = document.getElementById('input_video');
-    const canvasElement = document.getElementById('output_canvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    const status = document.getElementById('status');
+    const video = document.getElementById('input_v');
+    const ctxSrc = document.getElementById('c_src').getContext('2d');
+    const ctxOut = document.getElementById('c_out').getContext('2d');
 
-    function onResults(results) {
-        status.innerText = "SISTEMA ACTIVO";
-        canvasElement.width = videoElement.videoWidth;
-        canvasElement.height = videoElement.videoHeight;
+    function onResults(res) {
+        const w = ctxSrc.canvas.width = ctxOut.canvas.width = video.videoWidth;
+        const h = ctxSrc.canvas.height = ctxOut.canvas.height = video.videoHeight;
 
-        canvasCtx.save();
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        // Limpieza y dibujo de entrada
+        ctxSrc.drawImage(res.image, 0, 0);
+        ctxOut.fillStyle = '#000';
+        ctxOut.fillRect(0, 0, w, h);
+
+        ctxOut.save();
         
-        // Dibujamos el fondo negro
-        canvasCtx.fillStyle = '#000';
-        canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
-
-        // 1. CARA (Malla básica para estabilidad)
-        if (results.faceLandmarks) {
-            drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_TESSELATION,
-                          {color: '#00ffcc33', lineWidth: 0.5});
+        // 1. CARA: MALLA DE TESELACIÓN (Efecto 'Face Mesh' profesional)
+        if (res.faceLandmarks) {
+            drawConnectors(ctxOut, res.faceLandmarks, FACEMESH_TESSELATION, 
+                {color: 'rgba(0, 255, 204, 0.2)', lineWidth: 0.5});
+            drawConnectors(ctxOut, res.faceLandmarks, FACEMESH_FACE_OVAL, 
+                {color: '#00ffcc', lineWidth: 1});
         }
 
-        // 2. CUERPO (Líneas simples neón)
-        if (results.poseLandmarks) {
-            drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS,
-                          {color: '#00ffcc', lineWidth: 2});
+        // 2. CUERPO: ESQUELETO NEÓN (Fluido y sin lag)
+        if (res.poseLandmarks) {
+            drawConnectors(ctxOut, res.poseLandmarks, POSE_CONNECTIONS, 
+                {color: '#00ffcc', lineWidth: 2});
         }
 
-        // 3. MANOS (Puntos neón)
-        if (results.leftHandLandmarks) {
-            drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS,
-                          {color: '#ffffff', lineWidth: 1.5});
+        // 3. MANOS: DETALLE BLANCO
+        if (res.rightHandLandmarks) {
+            drawConnectors(ctxOut, res.rightHandLandmarks, HAND_CONNECTIONS, 
+                {color: '#ffffff', lineWidth: 1});
         }
-        if (results.rightHandLandmarks) {
-            drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS,
-                          {color: '#ffffff', lineWidth: 1.5});
+        if (res.leftHandLandmarks) {
+            drawConnectors(ctxOut, res.leftHandLandmarks, HAND_CONNECTIONS, 
+                {color: '#ffffff', lineWidth: 1});
         }
 
-        canvasCtx.restore();
+        ctxOut.restore();
     }
 
-    const holistic = new Holistic({locateFile: (file) => {
-        return `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`;
-    }});
-
+    const holistic = new Holistic({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
     holistic.setOptions({
-        modelComplexity: 0, // 0 = Rápido, 1 = Preciso. Bajamos a 0 para asegurar que cargue.
+        modelComplexity: 0, // MÁXIMA VELOCIDAD
         smoothLandmarks: true,
         minDetectionConfidence: 0.5,
         minTrackingConfidence: 0.5
     });
-
     holistic.onResults(onResults);
 
-    const camera = new Camera(videoElement, {
-        onFrame: async () => {
-            await holistic.send({image: videoElement});
-        },
-        width: 640,
-        height: 480
+    const camera = new Camera(video, {
+        onFrame: async () => { await holistic.send({image: video}); },
+        width: 640, height: 480
     });
     camera.start();
 </script>
