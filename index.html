@@ -2,90 +2,114 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - Neural Master v16</title>
+    <title>AI Avatar - Neural Master v17</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: monospace; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
         .grid { display: flex; width: 100vw; height: 100vh; }
         .view { flex: 1; position: relative; border-right: 1px solid #111; }
         canvas { width: 100%; height: 100%; transform: rotateY(180deg); object-fit: contain; }
         video { display: none; }
-        .ui { position: absolute; top: 15px; left: 15px; z-index: 10; display: flex; flex-direction: column; gap: 5px; }
-        .tag { color: #00ffcc; font-size: 10px; background: rgba(0,0,0,0.8); padding: 5px; border: 1px solid currentColor; }
-        .controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 20; }
-        button { background: #000; border: 1px solid #00ffcc; color: #00ffcc; padding: 5px 15px; cursor: pointer; font-family: monospace; font-size: 12px; }
-        button:hover { background: #00ffcc; color: #000; }
+        .ui-overlay { position: absolute; top: 15px; left: 15px; z-index: 10; display: flex; flex-direction: column; gap: 8px; }
+        .tag { color: #00ffcc; font-size: 10px; background: rgba(0,0,0,0.85); padding: 5px 12px; border: 1px solid currentColor; text-transform: uppercase; letter-spacing: 1px; }
+        .controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; z-index: 20; }
+        button { background: rgba(0,0,0,0.7); border: 1px solid #00ffcc; color: #00ffcc; padding: 8px 20px; cursor: pointer; font-family: inherit; transition: 0.3s; }
+        button:hover { background: #00ffcc; color: #000; box-shadow: 0 0 15px #00ffcc; }
     </style>
 </head>
 <body>
     <div class="controls">
-        <button onclick="setProfile('#00ffcc')">CYAN</button>
-        <button onclick="setProfile('#ff00ff')">MAGENTA</button>
-        <button onclick="setProfile('#ffaa00')">AMBER</button>
+        <button onclick="activateProfile('#00ffcc', 'CYAN')">CYAN</button>
+        <button onclick="activateProfile('#ff00ff', 'MAGENTA')">MAGENTA</button>
+        <button onclick="activateProfile('#ffaa00', 'AMBER')">AMBER</button>
     </div>
     <div class="grid">
-        <div class="view"><div class="ui"><div class="tag" id="tag-color">PROFILE: CYAN_ACTIVE</div></div><video id="vid"></video><canvas id="c_in"></canvas></div>
-        <div class="view"><div class="ui"><div class="tag">NEURAL_OUTPUT_V16</div></div><canvas id="c_out"></canvas></div>
+        <div class="view"><div class="ui-overlay"><div class="tag" id="status">STATUS: NEURAL_LINK_STABLE</div></div><video id="vid"></video><canvas id="c_in"></canvas></div>
+        <div class="view"><div class="ui-overlay"><div class="tag" id="profile-tag">ACTIVE_PROFILE: CYAN</div></div><canvas id="c_out"></canvas></div>
     </div>
 
 <script type="module">
     let activeColor = '#00ffcc';
-    window.setProfile = (color) => { 
-        activeColor = color; 
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const particles = [];
+
+    // Sintetizador para el "Pulso de Datos"
+    window.activateProfile = (color, name) => {
+        activeColor = color;
+        document.getElementById('profile-tag').innerText = `ACTIVE_PROFILE: ${name}`;
         document.querySelectorAll('.tag, button').forEach(el => el.style.color = color);
         document.querySelectorAll('button').forEach(el => el.style.borderColor = color);
-        document.getElementById('tag-color').innerText = `PROFILE: ${color === '#00ffcc' ? 'CYAN' : color === '#ff00ff' ? 'MAGENTA' : 'AMBER'}_ACTIVE`;
+        
+        // Sonido de pulso
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.5);
+        gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.start(); osc.stop(audioCtx.currentTime + 0.5);
     };
 
     const video = document.getElementById('vid');
     const ctxOut = document.getElementById('c_out').getContext('2d');
-    const particles = [];
-
-    function drawBackground(ctx, w, h, intensity) {
-        ctx.strokeStyle = activeColor + '11'; // Muy transparente
-        ctx.lineWidth = 0.5;
-        const spacing = 40 + (intensity * 20); // La rejilla se expande con la intensidad
-        for(let x=0; x<w; x+=spacing) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
-        for(let y=0; y<h; y+=spacing) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
-    }
 
     function onResults(res) {
         const w = ctxOut.canvas.width = video.videoWidth;
         const h = ctxOut.canvas.height = video.videoHeight;
         
-        // Calcular intensidad (boca abierta)
+        // Cálculo de intensidad reactiva
         let intensity = 0;
         if(res.faceLandmarks) {
             const d = Math.abs(res.faceLandmarks[13].y - res.faceLandmarks[14].y);
-            intensity = Math.min(d * 15, 1);
+            intensity = Math.min(d * 20, 1.2);
         }
 
         ctxOut.fillStyle = '#000';
         ctxOut.fillRect(0, 0, w, h);
-        
-        drawBackground(ctxOut, w, h, intensity);
+
+        // Dibujar Grid Dinámico
+        ctxOut.strokeStyle = activeColor + '15';
+        let spacing = 35 + (intensity * 25);
+        for(let i=0; i<w; i+=spacing) { ctxOut.beginPath(); ctxOut.moveTo(i,0); ctxOut.lineTo(i,h); ctxOut.stroke(); }
+        for(let i=0; i<h; i+=spacing) { ctxOut.beginPath(); ctxOut.moveTo(0,i); ctxOut.lineTo(w,i); ctxOut.stroke(); }
 
         ctxOut.save();
-        if(intensity > 0.4) {
-            ctxOut.shadowBlur = 20 * intensity;
+        if(intensity > 0.5) {
+            ctxOut.shadowBlur = 25 * intensity;
             ctxOut.shadowColor = activeColor;
         }
 
-        // Renderizado de Cuerpo y Cara con el color activo
-        if (res.poseLandmarks) drawConnectors(ctxOut, res.poseLandmarks, POSE_CONNECTIONS, {color: activeColor, lineWidth: 2});
-        if (res.faceLandmarks) drawConnectors(ctxOut, res.faceLandmarks, FACEMESH_FACE_OVAL, {color: activeColor, lineWidth: 2});
+        // Renderizado del Avatar
+        if (res.poseLandmarks) drawConnectors(ctxOut, res.poseLandmarks, POSE_CONNECTIONS, {color: activeColor + '88', lineWidth: 2});
+        if (res.faceLandmarks) drawConnectors(ctxOut, res.faceLandmarks, FACEMESH_FACE_OVAL, {color: activeColor, lineWidth: 2.5});
         
-        const handStyle = {color: intensity > 0.5 ? activeColor : '#fff', lineWidth: 2};
-        if (res.rightHandLandmarks) drawConnectors(ctxOut, res.rightHandLandmarks, HAND_CONNECTIONS, handStyle);
-        if (res.leftHandLandmarks) drawConnectors(ctxOut, res.leftHandLandmarks, HAND_CONNECTIONS, handStyle);
+        // Efecto de Manos con rastro
+        [res.leftHandLandmarks, res.rightHandLandmarks].forEach(hand => {
+            if(hand) {
+                drawConnectors(ctxOut, hand, HAND_CONNECTIONS, {color: intensity > 0.6 ? activeColor : '#fff', lineWidth: 2});
+                // Emitir partículas desde la punta del dedo índice
+                if(Math.random() > 0.4) particles.push({x: hand[8].x * w, y: hand[8].y * h, l: 1, vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5});
+            }
+        });
+
+        // Actualizar partículas
+        for(let i=particles.length-1; i>=0; i--) {
+            let p = particles[i];
+            p.x += p.vx; p.y += p.vy; p.l -= 0.04;
+            ctxOut.fillStyle = activeColor + Math.floor(p.l*255).toString(16).padStart(2, '0');
+            ctxOut.fillRect(p.x, p.y, 2, 2);
+            if(p.l <= 0) particles.splice(i, 1);
+        }
 
         ctxOut.restore();
     }
 
     const holistic = new Holistic({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
-    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
+    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6 });
     holistic.onResults(onResults);
 
     const camera = new Camera(video, { onFrame: async () => { await holistic.send({image: video}); }, width: 640, height: 480 });
