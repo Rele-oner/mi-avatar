@@ -2,28 +2,34 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V21 Stable</title>
+    <title>AI Avatar - V21.1 Ultra-Estable</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: #00ffcc; }
         .app-container { display: flex; width: 100vw; height: 100vh; }
-        .sidebar { width: 220px; background: rgba(0,20,20,0.9); border-right: 1px solid #00ffcc44; padding: 30px 20px; z-index: 10; }
-        .main-view { flex: 1; position: relative; }
-        canvas { width: 100%; height: 100%; transform: rotateY(180deg); object-fit: contain; }
+        .sidebar { width: 200px; background: rgba(0,10,10,0.95); border-right: 1px solid #00ffcc33; padding: 25px; z-index: 10; }
+        .main-view { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; }
+        canvas { max-width: 100%; max-height: 100%; transform: rotateY(180deg); border: 1px solid #00ffcc11; }
         video { display: none; }
-        .stat { margin-bottom: 20px; border-left: 2px solid #00ffcc; padding-left: 10px; }
-        .label { font-size: 10px; opacity: 0.6; text-transform: uppercase; }
-        .val { font-size: 14px; font-weight: bold; }
+        .stat { margin-bottom: 20px; }
+        .label { font-size: 9px; opacity: 0.5; letter-spacing: 1px; }
+        .val { font-size: 14px; font-weight: bold; text-shadow: 0 0 5px #00ffcc; }
+        #loading-overlay { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; transition: 0.5s; }
     </style>
 </head>
 <body>
+    <div id="loading-overlay">
+        <div class="val" id="load-msg">CARGANDO NÚCLEO...</div>
+        <div class="label" style="margin-top:10px">ESTABLECIENDO ENLACE NEURAL</div>
+    </div>
+
     <div class="app-container">
         <div class="sidebar">
-            <div class="stat"><div class="label">Engine_Link</div><div class="val" id="st">READY</div></div>
-            <div class="stat"><div class="label">Perf_Monitor</div><div class="val" id="fps">0 FPS</div></div>
-            <div class="stat"><div class="label">Iris_Sync</div><div class="val" id="iris">WAITING</div></div>
+            <div class="stat"><div class="label">LINK_STATUS</div><div class="val" id="st">OFFLINE</div></div>
+            <div class="stat"><div class="label">DATA_RATE</div><div class="val" id="fps">0 FPS</div></div>
+            <div class="stat"><div class="label">EYE_SYNC</div><div class="val" id="iris">--</div></div>
         </div>
         <div class="main-view">
             <canvas id="out"></canvas>
@@ -35,57 +41,57 @@
     const video = document.getElementById('v');
     const canvas = document.getElementById('out');
     const ctx = canvas.getContext('2d');
-    let themeColor = '#00ffcc';
+    const loadOverlay = document.getElementById('loading-overlay');
+    
     let lastTime = 0;
     let isProcessing = false;
 
     function onResults(res) {
-        // Ajuste dinámico de resolución para evitar lag
-        if (canvas.width !== video.videoWidth) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-        }
+        if (loadOverlay) loadOverlay.style.opacity = '0';
+        setTimeout(() => loadOverlay?.remove(), 500);
+
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 480;
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Renderizado del "Iris Protocol" (Solo centros para máxima velocidad)
+        // --- RENDERIZADO OPTIMIZADO ---
         if (res.faceLandmarks) {
-            const eyes = [468, 473]; 
-            eyes.forEach(i => {
+            // 1. Iris Protocol (Brillo en ojos)
+            [468, 473].forEach(i => {
                 const p = res.faceLandmarks[i];
                 ctx.beginPath();
                 ctx.arc(p.x * canvas.width, p.y * canvas.height, 4, 0, 7);
                 ctx.fillStyle = '#fff';
-                ctx.shadowBlur = 10; ctx.shadowColor = themeColor;
+                ctx.shadowBlur = 15; ctx.shadowColor = '#00ffcc';
                 ctx.fill();
             });
-            // Dibujamos solo el contorno esencial
-            drawConnectors(ctx, res.faceLandmarks, FACEMESH_FACE_OVAL, {color: themeColor, lineWidth: 2});
-            document.getElementById('iris').innerText = "LOCKED";
+
+            // 2. Contorno Facial (Sin malla interna para ahorrar CPU)
+            drawConnectors(ctx, res.faceLandmarks, FACEMESH_FACE_OVAL, {color: '#00ffcc', lineWidth: 2});
+            document.getElementById('iris').innerText = "SYNC_OK";
         }
 
-        // Renderizado simplificado de cuerpo y manos
-        const drawOpts = {color: themeColor, lineWidth: 2};
-        if (res.poseLandmarks) drawConnectors(ctx, res.poseLandmarks, POSE_CONNECTIONS, drawOpts);
-        if (res.leftHandLandmarks) drawConnectors(ctx, res.leftHandLandmarks, HAND_CONNECTIONS, {color: '#fff', lineWidth: 1.5});
-        if (res.rightHandLandmarks) drawConnectors(ctx, res.rightHandLandmarks, HAND_CONNECTIONS, {color: '#fff', lineWidth: 1.5});
+        // 3. Manos (Solo si aparecen)
+        const handStyle = {color: '#fff', lineWidth: 2};
+        if (res.leftHandLandmarks) drawConnectors(ctx, res.leftHandLandmarks, HAND_CONNECTIONS, handStyle);
+        if (res.rightHandLandmarks) drawConnectors(ctx, res.rightHandLandmarks, HAND_CONNECTIONS, handStyle);
 
-        // Monitor de rendimiento
+        // Monitor de sistema
         const now = performance.now();
-        document.getElementById('fps').innerText = Math.round(1000 / (now - lastTime)) + " FPS";
+        const currentFps = Math.round(1000 / (now - lastTime));
+        document.getElementById('fps').innerText = currentFps + " FPS";
+        document.getElementById('st').innerText = "STABLE";
         lastTime = now;
-        document.getElementById('st').innerText = "RUNNING";
-        
-        isProcessing = false; // Liberar para el siguiente frame
+        isProcessing = false;
     }
 
     const holistic = new Holistic({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
     
-    // CONFIGURACIÓN DE ALTO RENDIMIENTO
     holistic.setOptions({
-        modelComplexity: 0, // El nivel más rápido disponible
+        modelComplexity: 0, // Nivel Lite para evitar bloqueos
         smoothLandmarks: true,
-        minDetectionConfidence: 0.5,
+        minDetectionConfidence: 0.6,
         minTrackingConfidence: 0.5
     });
 
@@ -93,15 +99,17 @@
 
     const camera = new Camera(video, {
         onFrame: async () => {
-            if (isProcessing) return; // Si el modelo sigue ocupado, saltar este frame
+            if (isProcessing) return; // SKIP FRAME si el motor está ocupado
             isProcessing = true;
             await holistic.send({image: video});
         },
-        width: 640, height: 480 // Resolución interna reducida para fluidez total
+        width: 640, height: 480
     });
-    
-    camera.start().catch(() => {
-        document.getElementById('st').innerText = "ERROR_CAMERA";
+
+    document.getElementById('load-msg').innerText = "INICIANDO CÁMARA...";
+    camera.start().catch(err => {
+        document.getElementById('load-msg').innerText = "ERROR DE ACCESO";
+        console.error(err);
     });
 </script>
 </body>
