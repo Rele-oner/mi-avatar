@@ -2,50 +2,48 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - Neural Master v19</title>
+    <title>AI Avatar - Final Protocol v20</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <style>
-        body { margin: 0; background: #020202; overflow: hidden; font-family: 'Courier New', monospace; color: #00ffcc; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', monospace; color: #00ffcc; }
         .app-container { display: flex; width: 100vw; height: 100vh; }
-        .sidebar { width: 220px; background: rgba(0,0,0,0.9); border-right: 1px solid #1a1a1a; padding: 20px; display: flex; flex-direction: column; gap: 20px; font-size: 11px; }
-        .main-view { flex: 1; position: relative; display: flex; }
-        canvas { width: 100%; height: 100%; transform: rotateY(180deg); object-fit: contain; }
+        .sidebar { width: 240px; background: linear-gradient(90deg, rgba(0,20,20,0.8) 0%, transparent 100%); border-right: 1px solid rgba(0,255,204,0.2); padding: 30px 20px; z-index: 10; }
+        .main-view { flex: 1; position: relative; background: radial-gradient(circle, #050505 0%, #000 100%); }
+        canvas { width: 100%; height: 100%; transform: rotateY(180deg); }
         video { display: none; }
-        .stat-box { border-left: 2px solid currentColor; padding-left: 10px; margin-bottom: 15px; }
-        .tag { background: rgba(0,255,204,0.1); padding: 4px; display: inline-block; margin-bottom: 5px; border-radius: 2px; }
-        .controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; }
-        button { background: transparent; border: 1px solid currentColor; color: inherit; padding: 8px 15px; cursor: pointer; font-family: inherit; transition: 0.2s; }
-        button:hover { background: rgba(255,255,255,0.1); }
+        .stat-box { margin-bottom: 25px; letter-spacing: 1px; }
+        .tag { font-size: 10px; color: #fff; opacity: 0.5; margin-bottom: 4px; }
+        .value { font-size: 14px; font-weight: bold; text-shadow: 0 0 10px currentColor; }
+        .controls { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; }
+        button { background: rgba(0,0,0,0.5); border: 1px solid currentColor; color: inherit; padding: 10px 20px; cursor: pointer; border-radius: 4px; transition: 0.3s; }
+        button:hover { background: currentColor; color: #000; box-shadow: 0 0 20px currentColor; }
     </style>
 </head>
 <body>
     <div class="app-container">
         <div class="sidebar" id="sidebar">
             <div class="stat-box">
-                <div class="tag">SYSTEM_CORE</div>
-                <div>STATUS: ONLINE</div>
-                <div>LATENCY: <span id="lat">12ms</span></div>
+                <div class="tag">SYSTEM_CORE_V20</div>
+                <div class="value">STATUS: <span style="color:#fff">ENCRYPTED</span></div>
             </div>
             <div class="stat-box">
-                <div class="tag">NEURAL_DYNAMICS</div>
-                <div>STABILITY: 98.4%</div>
-                <div>EXPRESSION: <span id="expr">CALM</span></div>
+                <div class="tag">IRIS_TRACKING</div>
+                <div class="value" id="iris_stat">LOCKED</div>
             </div>
             <div class="stat-box">
-                <div class="tag">HARDWARE_SCAN</div>
-                <div>GPU_LOAD: LOW</div>
-                <div>STREAM: ACTIVE</div>
+                <div class="tag">NEURAL_LOAD</div>
+                <div class="value" id="load">24.5 GFLOPS</div>
             </div>
         </div>
         <div class="main-view">
             <canvas id="c_out"></canvas>
             <video id="vid"></video>
             <div class="controls">
-                <button onclick="setTheme('#00ffcc', 'CYAN')">01_CYAN</button>
-                <button onclick="setTheme('#ff00ff', 'MAGENTA')">02_OVERDRIVE</button>
-                <button onclick="setTheme('#ffaa00', 'AMBER')">03_LEGACY</button>
+                <button onclick="setTheme('#00ffcc')">CYAN_PULSE</button>
+                <button onclick="setTheme('#ff00ff')">MAGENTA_VOID</button>
+                <button onclick="setTheme('#ffffff')">NEUTRAL_CORE</button>
             </div>
         </div>
     </div>
@@ -56,55 +54,62 @@
     const ctx = canvas.getContext('2d');
     const video = document.getElementById('vid');
 
-    window.setTheme = (color, name) => {
+    window.setTheme = (color) => {
         themeColor = color;
-        document.body.style.color = color;
-        document.getElementById('sidebar').style.borderColor = color;
+        document.getElementById('sidebar').style.color = color;
     };
 
-    function onResults(res) {
-        const w = canvas.width = video.videoWidth;
-        const h = canvas.height = video.videoHeight;
-        ctx.clearRect(0, 0, w, h);
-
-        // 1. FONDO: Rejilla técnica
-        ctx.strokeStyle = themeColor + '11';
-        for(let i=0; i<w; i+=50) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,h); ctx.stroke(); }
-        for(let i=0; i<h; i+=50) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(w,i); ctx.stroke(); }
-
-        // 2. LÓGICA DE INTENSIDAD (Mouth & Movement)
-        let openMouth = 0;
-        if(res.faceLandmarks) {
-            openMouth = Math.abs(res.faceLandmarks[13].y - res.faceLandmarks[14].y) * 15;
-            document.getElementById('expr').innerText = openMouth > 0.4 ? 'ACTIVE_SCAN' : 'STABLE';
-        }
-
-        ctx.save();
-        if(openMouth > 0.3) {
-            ctx.shadowBlur = 20 * openMouth;
-            ctx.shadowColor = themeColor;
-        }
-
-        // 3. RENDER AVATAR
-        const options = { color: themeColor, lineWidth: 2 };
-        if (res.poseLandmarks) drawConnectors(ctx, res.poseLandmarks, POSE_CONNECTIONS, {color: themeColor + '44', lineWidth: 1});
-        if (res.faceLandmarks) {
-            drawConnectors(ctx, res.faceLandmarks, FACEMESH_FACE_OVAL, options);
-            drawConnectors(ctx, res.faceLandmarks, FACEMESH_LIPS, {color: '#fff', lineWidth: 1});
-        }
+    function drawIris(landmarks, indices, color) {
+        if(!landmarks) return;
+        const points = indices.map(i => landmarks[i]);
+        const x = points.reduce((s, p) => s + p.x, 0) / points.length;
+        const y = points.reduce((s, p) => s + p.y, 0) / points.length;
         
-        const hands = [res.leftHandLandmarks, res.rightHandLandmarks];
-        hands.forEach(h => { if(h) drawConnectors(ctx, h, HAND_CONNECTIONS, {color: '#fff', lineWidth: 1.5}); });
+        ctx.beginPath();
+        ctx.arc(x * canvas.width, y * canvas.height, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = color;
+        ctx.stroke();
+    }
 
-        ctx.restore();
-        document.getElementById('lat').innerText = Math.floor(Math.random() * 5 + 10) + 'ms';
+    function onResults(res) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Grid de fondo
+        ctx.strokeStyle = themeColor + '15';
+        ctx.lineWidth = 0.5;
+        for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
+
+        if (res.faceLandmarks) {
+            // Malla Facial
+            drawConnectors(ctx, res.faceLandmarks, FACEMESH_TESSELATION, {color: themeColor + '33', lineWidth: 0.5});
+            drawConnectors(ctx, res.faceLandmarks, FACEMESH_FACE_OVAL, {color: themeColor, lineWidth: 2});
+            
+            // Iris Glow (Protocolo V20)
+            drawIris(res.faceLandmarks, [468, 469, 470, 471, 472], themeColor); // Ojo derecho
+            drawIris(res.faceLandmarks, [473, 474, 475, 476, 477], themeColor); // Ojo izquierdo
+            document.getElementById('iris_stat').innerText = "TRACKING_ACTIVE";
+        }
+
+        if (res.poseLandmarks) {
+            drawConnectors(ctx, res.poseLandmarks, POSE_CONNECTIONS, {color: themeColor, lineWidth: 2});
+        }
+
+        const hands = [res.leftHandLandmarks, res.rightHandLandmarks];
+        hands.forEach(h => { if(h) drawConnectors(ctx, h, HAND_CONNECTIONS, {color: '#fff', lineWidth: 2}); });
+        
+        document.getElementById('load').innerText = (Math.random() * 10 + 20).toFixed(2) + " GFLOPS";
     }
 
     const holistic = new Holistic({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
-    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
+    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.7 });
     holistic.onResults(onResults);
 
-    const camera = new Camera(video, { onFrame: async () => { await holistic.send({image: video}); }, width: 640, height: 480 });
+    const camera = new Camera(video, { onFrame: async () => { await holistic.send({image: video}); }, width: 1280, height: 720 });
     camera.start();
 </script>
 </body>
