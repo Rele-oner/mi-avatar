@@ -2,50 +2,45 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V22 Light-Core</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <title>AI Avatar - V23 Insta-Link</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: #00ffcc; }
-        .app { display: flex; width: 100vw; height: 100vh; }
-        .sidebar { width: 220px; background: #001111; border-right: 1px solid #00ffcc44; padding: 20px; }
-        .main { flex: 1; position: relative; background: #000; display: flex; align-items: center; justify-content: center; }
-        canvas { height: 90vh; transform: rotateY(180deg); border: 1px solid #00ffcc22; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: monospace; color: #00ffcc; }
+        .ui { position: absolute; left: 20px; top: 20px; z-index: 10; border-left: 2px solid #00ffcc; padding-left: 15px; }
+        .main { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+        canvas { height: 80vh; transform: rotateY(180deg); }
+        #loader { position: absolute; inset: 0; background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; }
         video { display: none; }
-        .stat { margin-bottom: 20px; }
-        .label { font-size: 10px; opacity: 0.5; }
-        .val { font-size: 14px; font-weight: bold; color: #fff; }
-        #boot { position: absolute; inset: 0; background: #000; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
     </style>
 </head>
 <body>
-    <div id="boot">
-        <div class="val" id="msg">CARGANDO NÚCLEO V22...</div>
-        <div class="label" style="margin-top: 10px;">OPTIMIZANDO RECURSOS</div>
+    <div id="loader">
+        <h2 id="msg">INICIALIZANDO NÚCLEO...</h2>
+        <p style="font-size: 10px; opacity: 0.5;">SI TARDA MÁS DE 10 SEG, RECARGA LA PÁGINA</p>
     </div>
 
-    <div class="app">
-        <div class="sidebar">
-            <div class="stat"><div class="label">ENGINE</div><div class="val" id="status">OFFLINE</div></div>
-            <div class="stat"><div class="label">PERFORMANCE</div><div class="val" id="fps">0 FPS</div></div>
-            <div class="stat"><div class="label">IRIS_SYNC</div><div class="val" id="iris">--</div></div>
-        </div>
-        <div class="main">
-            <canvas id="canvas"></canvas>
-            <video id="video" playsinline></video>
-        </div>
+    <div class="ui">
+        <div style="font-size: 10px; opacity: 0.6;">SYSTEM_V23</div>
+        <div id="fps" style="font-size: 18px; font-weight: bold;">WAITING...</div>
+        <div id="status" style="color: #fff; font-size: 12px;">LINK_START</div>
+    </div>
+
+    <div class="main">
+        <canvas id="out"></canvas>
+        <video id="v" playsinline></video>
     </div>
 
 <script type="module">
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
+    const video = document.getElementById('v');
+    const canvas = document.getElementById('out');
     const ctx = canvas.getContext('2d');
-    const bootMsg = document.getElementById('msg');
-    
+    const msg = document.getElementById('msg');
     let lastTime = 0;
 
     function onResults(res) {
-        document.getElementById('boot').style.display = 'none';
+        // Quitar el cargador en el primer frame exitoso
+        document.getElementById('loader').style.display = 'none';
         
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
@@ -54,36 +49,32 @@
         if (res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0) {
             const face = res.multiFaceLandmarks[0];
 
-            // RENDER IRIS (Puntos 468 y 473)
+            // 1. DIBUJAR IRIS (BRILLO BLANCO)
             ctx.fillStyle = "#fff";
             [468, 473].forEach(idx => {
                 const p = face[idx];
                 ctx.beginPath();
-                ctx.arc(p.x * canvas.width, p.y * canvas.height, 4, 0, 7);
-                ctx.shadowBlur = 15; ctx.shadowColor = "#00ffcc";
+                ctx.arc(p.x * canvas.width, p.y * canvas.height, 5, 0, 7);
                 ctx.fill();
             });
 
-            // RENDER CONTORNO (Simplificado para evitar lag)
+            // 2. DIBUJAR CONTORNO (LÍNEA CYAN)
             ctx.strokeStyle = "#00ffcc";
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            // Dibujamos un óvalo simplificado usando algunos puntos clave
-            const ovalIdx = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
-            ovalIdx.forEach((idx, i) => {
+            // Puntos clave del contorno para no sobrecargar
+            const oval = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+            oval.forEach((idx, i) => {
                 const p = face[idx];
                 if(i === 0) ctx.moveTo(p.x * canvas.width, p.y * canvas.height);
                 else ctx.lineTo(p.x * canvas.width, p.y * canvas.height);
             });
             ctx.closePath();
             ctx.stroke();
-
-            document.getElementById('iris').innerText = "LOCKED";
         }
 
         const now = performance.now();
         document.getElementById('fps').innerText = Math.round(1000 / (now - lastTime)) + " FPS";
-        document.getElementById('status').innerText = "STABLE";
         lastTime = now;
     }
 
@@ -93,7 +84,7 @@
 
     faceMesh.setOptions({
         maxNumFaces: 1,
-        refineLandmarks: true, // Esto activa el Iris Tracking detallado
+        refineLandmarks: true, // Importante para el iris
         minDetectionConfidence: 0.5,
         minTrackingConfidence: 0.5
     });
@@ -104,13 +95,11 @@
         onFrame: async () => {
             await faceMesh.send({image: video});
         },
-        width: 640, height: 480
+        width: 640, height: 480 // Resolución baja para asegurar fluidez
     });
 
-    bootMsg.innerText = "ENCENDIENDO CÁMARA...";
-    camera.start().catch(e => {
-        bootMsg.innerText = "ERROR: PERMISO DENEGADO";
-    });
+    msg.innerText = "ACCEDIENDO A CÁMARA...";
+    camera.start().catch(() => msg.innerText = "ERROR: ACTIVA LA CÁMARA");
 </script>
 </body>
 </html>
