@@ -2,23 +2,23 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - Ultimate Synthetic v12</title>
+    <title>AI Avatar - Holographic v13</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; }
         .grid { display: flex; width: 100vw; height: 100vh; }
-        .view { flex: 1; position: relative; border: 1px solid #111; }
+        .view { flex: 1; position: relative; border-right: 1px solid #111; }
         canvas { width: 100%; height: 100%; transform: rotateY(180deg); object-fit: contain; }
         video { display: none; }
-        .label { position: absolute; top: 15px; left: 15px; color: #00ffcc; font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 2px; background: rgba(0,0,0,0.8); padding: 5px 10px; border: 1px solid #00ffcc; border-radius: 2px; }
+        .label { position: absolute; top: 15px; left: 15px; color: #00ffcc; font-family: monospace; font-size: 10px; background: rgba(0,0,0,0.8); padding: 5px; border: 1px solid #00ffcc; z-index: 10; }
     </style>
 </head>
 <body>
     <div class="grid">
-        <div class="view"><div class="label">NEURAL_FEED_STABLE</div><video id="vid"></video><canvas id="c_in"></canvas></div>
-        <div class="view"><div class="label">SYNTHETIC_VOLUME_V12</div><canvas id="c_out"></canvas></div>
+        <div class="view"><div class="label">NEURAL_FEED</div><video id="vid"></video><canvas id="c_in"></canvas></div>
+        <div class="view"><div class="label">HOLO_SCAN_V13</div><canvas id="c_out"></canvas></div>
     </div>
 
 <script type="module">
@@ -26,25 +26,39 @@
     const ctxIn = document.getElementById('c_in').getContext('2d');
     const ctxOut = document.getElementById('c_out').getContext('2d');
 
-    function drawBodyShell(ctx, lm, w, h) {
+    function drawHoloBody(ctx, lm, w, h) {
         if (!lm[11] || !lm[12] || !lm[23] || !lm[24]) return;
 
-        // Crear polígono de torso
+        ctx.save();
+        // Creamos la máscara del torso
         ctx.beginPath();
         ctx.moveTo(lm[11].x * w, lm[11].y * h);
         ctx.lineTo(lm[12].x * w, lm[12].y * h);
         ctx.lineTo(lm[24].x * w, lm[24].y * h);
         ctx.lineTo(lm[23].x * w, lm[23].y * h);
         ctx.closePath();
-        
-        // Relleno de "Masa" Digital
-        const grad = ctx.createLinearGradient(w/2, 0, w/2, h);
-        grad.addColorStop(0, 'rgba(0, 255, 204, 0.15)');
-        grad.addColorStop(1, 'rgba(0, 255, 204, 0.02)');
-        ctx.fillStyle = grad;
+        ctx.clip(); // Todo lo que dibujemos ahora solo saldrá dentro del torso
+
+        // 1. Relleno base sutil
+        ctx.fillStyle = 'rgba(0, 255, 204, 0.05)';
         ctx.fill();
-        ctx.strokeStyle = 'rgba(0, 255, 204, 0.4)';
+
+        // 2. EFECTO SCANLINES (Líneas que suben)
+        const time = Date.now() * 0.05;
+        ctx.strokeStyle = 'rgba(0, 255, 204, 0.2)';
         ctx.lineWidth = 1;
+        for (let i = 0; i < h; i += 8) {
+            let yPos = (i + time) % h;
+            ctx.beginPath();
+            ctx.moveTo(0, yPos);
+            ctx.lineTo(w, yPos);
+            ctx.stroke();
+        }
+        ctx.restore();
+
+        // Contorno neón sólido
+        ctx.strokeStyle = '#00ffcc';
+        ctx.lineWidth = 2;
         ctx.stroke();
     }
 
@@ -56,25 +70,16 @@
         ctxOut.fillStyle = '#000';
         ctxOut.fillRect(0, 0, w, h);
 
-        ctxOut.save();
+        // Renderizado
+        if (res.poseLandmarks) drawHoloBody(ctxOut, res.poseLandmarks, w, h);
         
-        // 1. CUERPO: VOLUMEN SINTÉTICO
-        if (res.poseLandmarks) {
-            drawBodyShell(ctxOut, res.poseLandmarks, w, h);
-            drawConnectors(ctxOut, res.poseLandmarks, POSE_CONNECTIONS, {color: '#00ffcc', lineWidth: 2});
-        }
-
-        // 2. CARA: MALLA PROFESIONAL (Filtrada)
         if (res.faceLandmarks) {
-            drawConnectors(ctxOut, res.faceLandmarks, FACEMESH_TESSELATION, {color: 'rgba(0, 255, 204, 0.12)', lineWidth: 0.5});
+            drawConnectors(ctxOut, res.faceLandmarks, FACEMESH_TESSELATION, {color: 'rgba(0,255,204,0.1)', lineWidth: 0.5});
             drawConnectors(ctxOut, res.faceLandmarks, FACEMESH_FACE_OVAL, {color: '#00ffcc', lineWidth: 1.5});
         }
 
-        // 3. MANOS: DETALLE WIREFRAME
-        if (res.rightHandLandmarks) drawConnectors(ctxOut, res.rightHandLandmarks, HAND_CONNECTIONS, {color: '#ffffff', lineWidth: 1});
-        if (res.leftHandLandmarks) drawConnectors(ctxOut, res.leftHandLandmarks, HAND_CONNECTIONS, {color: '#ffffff', lineWidth: 1});
-
-        ctxOut.restore();
+        if (res.rightHandLandmarks) drawConnectors(ctxOut, res.rightHandLandmarks, HAND_CONNECTIONS, {color: '#fff', lineWidth: 1});
+        if (res.leftHandLandmarks) drawConnectors(ctxOut, res.leftHandLandmarks, HAND_CONNECTIONS, {color: '#fff', lineWidth: 1});
     }
 
     const holistic = new Holistic({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
