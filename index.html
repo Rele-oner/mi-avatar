@@ -10,78 +10,60 @@
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: #00ffcc; }
         .app-container { display: flex; width: 100vw; height: 100vh; }
         
-        /* Panel Lateral de Diagnóstico */
         .sidebar { 
             width: 250px; 
-            background: rgba(0, 10, 10, 0.9); 
-            border-right: 1px solid rgba(0, 255, 204, 0.3); 
-            padding: 30px 20px; 
+            background: linear-gradient(90deg, rgba(0,20,20,0.9) 0%, transparent 100%);
+            border-right: 1px solid rgba(0,255,204,0.2); 
+            padding: 40px 20px; 
             z-index: 10;
-            display: flex;
-            flex-direction: column;
-            gap: 25px;
         }
 
         .main-view { flex: 1; position: relative; background: #000; }
         canvas { width: 100%; height: 100%; transform: rotateY(180deg); }
         video { display: none; }
 
-        /* Estilos de la Interfaz */
-        .stat-box { border-left: 2px solid currentColor; padding-left: 15px; }
-        .tag { font-size: 10px; text-transform: uppercase; opacity: 0.6; margin-bottom: 5px; }
-        .value { font-size: 14px; font-weight: bold; letter-spacing: 1px; }
+        .stat-box { margin-bottom: 25px; border-left: 2px solid currentColor; padding-left: 15px; }
+        .tag { font-size: 10px; text-transform: uppercase; opacity: 0.6; margin-bottom: 4px; }
+        .value { font-size: 14px; font-weight: bold; text-shadow: 0 0 10px currentColor; }
 
         .controls { 
-            position: absolute; 
-            bottom: 30px; 
-            left: 50%; 
-            transform: translateX(-50%); 
-            display: flex; 
-            gap: 15px; 
+            position: absolute; bottom: 30px; left: 50%; 
+            transform: translateX(-50%); display: flex; gap: 15px; 
         }
 
         button { 
-            background: rgba(0,0,0,0.6); 
-            border: 1px solid currentColor; 
-            color: inherit; 
-            padding: 10px 20px; 
-            cursor: pointer; 
-            font-family: inherit;
-            transition: 0.3s;
+            background: rgba(0,0,0,0.7); border: 1px solid currentColor; 
+            color: inherit; padding: 10px 20px; cursor: pointer; 
+            border-radius: 4px; transition: 0.3s;
         }
 
-        button:hover { background: currentColor; color: #000; }
+        button:hover { background: currentColor; color: #000; box-shadow: 0 0 20px currentColor; }
     </style>
 </head>
 <body>
     <div class="app-container">
         <div class="sidebar" id="sidebar">
             <div class="stat-box">
-                <div class="tag">System Status</div>
-                <div class="value">NODE_ACTIVE_V20</div>
+                <div class="tag">SYSTEM_CORE_V20</div>
+                <div class="value">STATUS: <span style="color:#fff">ENCRYPTED</span></div>
             </div>
             <div class="stat-box">
-                <div class="tag">Iris Protocol</div>
-                <div class="value" id="iris_val">WAITING...</div>
+                <div class="tag">IRIS_TRACKING</div>
+                <div class="value" id="iris_stat">LOCKED</div>
             </div>
             <div class="stat-box">
-                <div class="tag">Neural Load</div>
-                <div class="value" id="load_val">0.00 GFLOPS</div>
-            </div>
-            <div class="stat-box">
-                <div class="tag">Core Sync</div>
-                <div class="value">STABLE 99%</div>
+                <div class="tag">NEURAL_LOAD</div>
+                <div class="value" id="load">24.5 GFLOPS</div>
             </div>
         </div>
 
         <div class="main-view">
             <canvas id="c_out"></canvas>
             <video id="vid"></video>
-            
             <div class="controls">
-                <button onclick="changeTheme('#00ffcc')">CYAN</button>
-                <button onclick="changeTheme('#ff00ff')">MAGENTA</button>
-                <button onclick="changeTheme('#ffaa00')">AMBER</button>
+                <button onclick="setTheme('#00ffcc')">CYAN_PULSE</button>
+                <button onclick="setTheme('#ff00ff')">MAGENTA_VOID</button>
+                <button onclick="setTheme('#ffffff')">NEUTRAL_CORE</button>
             </div>
         </div>
     </div>
@@ -92,22 +74,21 @@
     const ctx = canvas.getContext('2d');
     const video = document.getElementById('vid');
 
-    window.changeTheme = (color) => {
+    window.setTheme = (color) => {
         themeColor = color;
-        document.body.style.color = color;
+        document.getElementById('sidebar').style.color = color;
     };
 
-    // Función para dibujar el brillo en los ojos (Iris)
-    function drawIrisGlow(landmarks, eyeIndices, color) {
+    function drawIris(landmarks, indices, color) {
         if(!landmarks) return;
-        const pts = eyeIndices.map(i => landmarks[i]);
-        const centerX = pts.reduce((s, p) => s + p.x, 0) / pts.length;
-        const centerY = pts.reduce((s, p) => s + p.y, 0) / pts.length;
-
+        const points = indices.map(i => landmarks[i]);
+        const x = points.reduce((s, p) => s + p.x, 0) / points.length;
+        const y = points.reduce((s, p) => s + p.y, 0) / points.length;
+        
         ctx.save();
         ctx.beginPath();
-        ctx.arc(centerX * canvas.width, centerY * canvas.height, 5, 0, Math.PI * 2);
-        ctx.fillStyle = "#fff";
+        ctx.arc(x * canvas.width, y * canvas.height, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
         ctx.shadowBlur = 15;
         ctx.shadowColor = color;
         ctx.fill();
@@ -119,43 +100,37 @@
         canvas.height = video.videoHeight;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // 1. Fondo: Rejilla técnica suave
+        // Fondo: Grid de datos
         ctx.strokeStyle = themeColor + '15';
         ctx.lineWidth = 0.5;
-        for(let i=0; i<canvas.width; i+=50) {
-            ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke();
-        }
+        for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,canvas.height); ctx.stroke(); }
 
-        // 2. Render de Cara y Cuerpo
         if (res.faceLandmarks) {
+            // Malla de densidad
             drawConnectors(ctx, res.faceLandmarks, FACEMESH_TESSELATION, {color: themeColor + '22', lineWidth: 0.5});
             drawConnectors(ctx, res.faceLandmarks, FACEMESH_FACE_OVAL, {color: themeColor, lineWidth: 2});
             
-            // Iris Protocol (Puntos específicos de pupilas en MediaPipe)
-            drawIrisGlow(res.faceLandmarks, [468, 469, 470, 471, 472], themeColor);
-            drawIrisGlow(res.faceLandmarks, [473, 474, 475, 476, 477], themeColor);
-            document.getElementById('iris_val').innerText = "LOCKED_ON";
+            // Iris Protocol V20
+            drawIris(res.faceLandmarks, [468, 469, 470, 471, 472], themeColor);
+            drawIris(res.faceLandmarks, [473, 474, 475, 476, 477], themeColor);
+            document.getElementById('iris_stat').innerText = "TRACKING_ACTIVE";
         }
 
         if (res.poseLandmarks) {
             drawConnectors(ctx, res.poseLandmarks, POSE_CONNECTIONS, {color: themeColor, lineWidth: 2});
         }
 
-        if (res.leftHandLandmarks) drawConnectors(ctx, res.leftHandLandmarks, HAND_CONNECTIONS, {color: '#fff', lineWidth: 2});
-        if (res.rightHandLandmarks) drawConnectors(ctx, res.rightHandLandmarks, HAND_CONNECTIONS, {color: '#fff', lineWidth: 2});
-
-        // Actualizar diagnóstico simulado
-        document.getElementById('load_val').innerText = (Math.random() * 5 + 25).toFixed(2) + " GFLOPS";
+        const hands = [res.leftHandLandmarks, res.rightHandLandmarks];
+        hands.forEach(h => { if(h) drawConnectors(ctx, h, HAND_CONNECTIONS, {color: '#fff', lineWidth: 2}); });
+        
+        document.getElementById('load').innerText = (Math.random() * 10 + 20).toFixed(2) + " GFLOPS";
     }
 
     const holistic = new Holistic({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`});
-    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5 });
     holistic.onResults(onResults);
 
-    const camera = new Camera(video, {
-        onFrame: async () => { await holistic.send({image: video}); },
-        width: 1280, height: 720
-    });
+    const camera = new Camera(video, { onFrame: async () => { await holistic.send({image: video}); }, width: 1280, height: 720 });
     camera.start();
 </script>
 </body>
