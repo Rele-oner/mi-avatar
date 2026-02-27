@@ -2,24 +2,28 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V31 ENIGMA</title>
+    <title>AI Avatar - V32 TITAN</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
-        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); filter: contrast(1.2) brightness(1.1); }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Share Tech Mono', monospace; }
+        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); filter: contrast(1.5) saturate(1.2); }
         video { display: none; }
-        #hud { position: absolute; top: 30px; left: 30px; color: #00ffcc; pointer-events: none; border-left: 1px solid #00ffcc; padding-left: 15px; }
-        .glitch { animation: pulse 2s infinite; font-weight: bold; letter-spacing: 2px; }
-        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+        #overlay { position: absolute; inset: 0; pointer-events: none; 
+                   background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                               linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+                   background-size: 100% 4px, 3px 100%; z-index: 10; }
+        #hud { position: absolute; top: 40px; left: 40px; color: #00ffcc; text-shadow: 0 0 10px #00ffcc; }
+        .stat { font-size: 12px; margin-bottom: 5px; border-bottom: 1px solid rgba(0, 255, 204, 0.3); }
     </style>
 </head>
 <body>
+    <div id="overlay"></div>
     <div id="hud">
-        <div class="glitch">ENIGMA_ENGINE_V31</div>
-        <div style="font-size: 10px; opacity: 0.7;">NEURAL_DENSITY: MAXIMUM</div>
-        <div id="fps" style="font-size: 14px; color: #fff;">0</div>
+        <div class="stat">PROJECT: TITAN_V32</div>
+        <div class="stat">CORE: OVERDRIVE</div>
+        <div id="fps" style="font-size: 20px; font-weight: bold;">0</div>
     </div>
     <canvas id="out"></canvas>
     <video id="v" playsinline></video>
@@ -30,60 +34,42 @@
     const ctx = canvas.getContext('2d');
     let lastTime = 0;
 
-    function drawGlow(face) {
-        // Efecto de puntos de datos brillantes
-        ctx.fillStyle = "rgba(0, 255, 204, 0.8)";
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = "#00ffcc";
-        const landmarks = [1, 4, 152, 10, 33, 263, 61, 291]; // Puntos clave
-        landmarks.forEach(i => {
-            const p = face[i];
-            ctx.beginPath();
-            ctx.arc(p.x * canvas.width, p.y * canvas.height, 2, 0, 7);
-            ctx.fill();
-        });
-    }
-
     function onResults(res) {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         
-        // Fondo con un poco de "memoria" para el rastro de luz
-        ctx.fillStyle = "rgba(0, 5, 5, 1)";
+        ctx.fillStyle = "#000a0a"; // Fondo con tinte cian oscuro
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         if (res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0) {
             const face = res.multiFaceLandmarks[0];
 
-            // 1. MALLA BASE (Tratamiento de luz acumulativa)
-            ctx.globalAlpha = 0.3;
-            drawConnectors(ctx, face, FACEMESH_TESSELATION, {color: '#00ffcc', lineWidth: 0.5});
-            
-            // 2. ENFOQUE EN RASGOS (Líneas blancas intensas)
-            ctx.globalAlpha = 0.8;
-            ctx.shadowBlur = 15;
+            // 1. MALLA VOLUMÉTRICA (Líneas más gruesas y brillantes)
+            ctx.shadowBlur = 10;
             ctx.shadowColor = "#00ffcc";
-            drawConnectors(ctx, face, FACEMESH_FACE_OVAL, {color: '#00ffcc', lineWidth: 1.5});
-            drawConnectors(ctx, face, FACEMESH_LIPS, {color: '#fff', lineWidth: 1});
+            ctx.globalAlpha = 0.4;
+            drawConnectors(ctx, face, FACEMESH_TESSELATION, {color: '#00ffcc', lineWidth: 0.8});
 
-            // 3. OJOS "CORE" (Luz blanca pura)
-            ctx.fillStyle = "#fff";
+            // 2. ESTRUCTURA ÓPTICA (Contornos en blanco puro)
+            ctx.globalAlpha = 1.0;
+            ctx.shadowBlur = 20;
+            drawConnectors(ctx, face, FACEMESH_FACE_OVAL, {color: '#00ffcc', lineWidth: 2.5});
+            drawConnectors(ctx, face, FACEMESH_LIPS, {color: '#ffffff', lineWidth: 1.5});
+
+            // 3. OJOS "TITAN" (Luz cegadora)
             [468, 473].forEach(idx => {
                 const p = face[idx];
+                ctx.shadowBlur = 40;
+                ctx.shadowColor = "#00ffcc";
+                ctx.fillStyle = "#fff";
                 ctx.beginPath();
-                ctx.arc(p.x * canvas.width, p.y * canvas.height, 7, 0, 7);
+                ctx.arc(p.x * canvas.width, p.y * canvas.height, 9, 0, Math.PI * 2);
                 ctx.fill();
+                
+                // Efecto destello horizontal
+                ctx.fillStyle = "rgba(0, 255, 204, 0.2)";
+                ctx.fillRect(0, p.y * canvas.height - 1, canvas.width, 2);
             });
-
-            drawGlow(face);
-            ctx.shadowBlur = 0;
-            ctx.globalAlpha = 1.0;
-        }
-
-        // 4. POST-PROCESADO: RUIDO Y VIGNETTE
-        ctx.fillStyle = "rgba(0, 255, 204, 0.02)";
-        for (let i = 0; i < 50; i++) {
-            ctx.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 2, 2);
         }
 
         const now = performance.now();
@@ -91,24 +77,10 @@
         lastTime = now;
     }
 
-    const faceMesh = new FaceMesh({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
-    });
-
-    faceMesh.setOptions({
-        maxNumFaces: 1,
-        refineLandmarks: true,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-    });
-
+    const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
+    faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5});
     faceMesh.onResults(onResults);
-
-    const camera = new Camera(video, {
-        onFrame: async () => { await faceMesh.send({image: video}); },
-        width: 1280, height: 720
-    });
-    camera.start();
+    new Camera(video, {onFrame: async () => {await faceMesh.send({image: video})}, width: 1280, height: 720}).start();
 </script>
 </body>
 </html>
