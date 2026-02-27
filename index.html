@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V37 LIQUID</title>
+    <title>AI Avatar - V38 ZERO</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
@@ -10,85 +10,68 @@
         body { margin: 0; background: #000; overflow: hidden; }
         canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); }
         video { display: none; }
-        #stats { position: absolute; top: 20px; left: 20px; color: #00ffcc; font-family: monospace; font-size: 12px; pointer-events: none; }
+        #emergency-hud { position: absolute; top: 10px; left: 10px; color: #ff0055; font-family: monospace; font-size: 10px; }
     </style>
 </head>
 <body>
-    <div id="stats">SYSTEM_V37 // FPS: <span id="fps">0</span></div>
+    <div id="emergency-hud">CORE_V38: PERFORMANCE_MODE_ACTIVE</div>
     <canvas id="out"></canvas>
     <video id="v" playsinline></video>
 
 <script type="module">
     const video = document.getElementById('v');
     const canvas = document.getElementById('out');
-    const ctx = canvas.getContext('2d', { alpha: false }); // Optimización de contexto
-    let lastTime = 0;
-    let smoothFace = null;
+    const ctx = canvas.getContext('2d', { desynchronized: true, alpha: false });
 
-    function lerp(a, b, t) { return a + (b - a) * t; }
+    // Puntos clave mínimos para evitar el colapso (Estructura ósea facial)
+    const MIN_MESH = [
+        [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109, 10]
+    ];
 
     function onResults(res) {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-
-        // Fondo sólido (más rápido que transparentes)
-        ctx.fillStyle = "#000505";
+        // Ajuste de resolución de dibujo para máxima velocidad
+        if (canvas.width !== 320) { canvas.width = 320; canvas.height = 240; }
+        
+        ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        if (res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0) {
-            let face = res.multiFaceLandmarks[0];
+        if (res.multiFaceLandmarks && res.multiFaceLandmarks[0]) {
+            const face = res.multiFaceLandmarks[0];
 
-            // INTERPOLACIÓN PARA FLUIDEZ SEDA
-            if (!smoothFace) smoothFace = face;
-            smoothFace = face.map((p, i) => ({
-                x: lerp(smoothFace[i].x, p.x, 0.4), // Ajusta este 0.4 (menor = más suave, mayor = más rápido)
-                y: lerp(smoothFace[i].y, p.y, 0.4)
-            }));
-
-            // DIBUJO OPTIMIZADO
-            ctx.lineWidth = 0.5;
-            
-            // Capa de Brillo (Falsa sombra)
-            ctx.strokeStyle = "rgba(0, 255, 204, 0.15)";
-            drawConnectors(ctx, smoothFace, FACEMESH_TESSELATION);
-            
-            // Capa Estructural
-            ctx.strokeStyle = "rgba(0, 255, 204, 0.4)";
+            // Dibujo ultra-veloz de contorno
+            ctx.strokeStyle = "#00ffcc";
             ctx.lineWidth = 1;
-            drawConnectors(ctx, smoothFace, FACEMESH_FACE_OVAL);
-            
-            // OJOS (Puntos puros, sin sombras pesadas)
+            ctx.beginPath();
+            MIN_MESH[0].forEach((idx, i) => {
+                const p = face[idx];
+                if (i === 0) ctx.moveTo(p.x * 320, p.y * 240);
+                else ctx.lineTo(p.x * 320, p.y * 240);
+            });
+            ctx.stroke();
+
+            // Ojos: El alma del avatar (puntos simples)
             ctx.fillStyle = "#fff";
             [468, 473].forEach(idx => {
-                const p = smoothFace[idx];
-                ctx.beginPath();
-                ctx.arc(p.x * canvas.width, p.y * canvas.height, 4, 0, 7);
-                ctx.fill();
+                const p = face[idx];
+                ctx.fillRect(p.x * 320 - 1, p.y * 240 - 1, 2, 2);
             });
-
-            // EFECTO SCANLINE (Dibujado directamente)
-            ctx.fillStyle = "rgba(0, 255, 204, 0.03)";
-            for(let i=0; i<canvas.height; i+=4) ctx.fillRect(0, i, canvas.width, 1);
         }
-
-        const now = performance.now();
-        document.getElementById('fps').innerText = Math.round(1000 / (now - lastTime));
-        lastTime = now;
     }
 
     const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
     faceMesh.setOptions({
         maxNumFaces: 1,
-        refineLandmarks: false, // Desactivado para ganar velocidad
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
+        refineLandmarks: false,
+        minDetectionConfidence: 0.4,
+        minTrackingConfidence: 0.4
     });
     faceMesh.onResults(onResults);
-    
-    new Camera(video, {
-        onFrame: async () => { await faceMesh.send({image: video}) },
-        width: 640, height: 480 // Bajamos resolución de entrada (mejor FPS) pero escalamos en canvas
-    }).start();
+
+    const camera = new Camera(video, {
+        onFrame: async () => { await faceMesh.send({image: video}); },
+        width: 320, height: 240 // Resolución mínima absoluta
+    });
+    camera.start();
 </script>
 </body>
 </html>
