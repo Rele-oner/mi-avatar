@@ -2,72 +2,95 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V42 BYPASS</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/clmtrackr/1.1.2/clmtrackr.min.js"></script>
+    <title>AI Avatar - V43 GHOST</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; color: #00ffcc; font-family: monospace; }
-        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); position: absolute; top: 0; left: 0; }
-        video { position: fixed; bottom: 10px; right: 10px; width: 120px; opacity: 0.4; transform: rotateY(180deg); border: 1px solid #00ffcc; }
-        #log { position: fixed; top: 10px; left: 10px; font-size: 10px; }
+        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); position: absolute; z-index: 1; }
+        #v { position: fixed; bottom: 10px; right: 10px; width: 120px; opacity: 0.5; transform: rotateY(180deg); border: 1px solid #00ffcc; z-index: 2; }
+        #ui { position: fixed; top: 10px; left: 10px; z-index: 3; font-size: 11px; }
     </style>
 </head>
 <body>
-    <div id="log">BYPASS_ENGINE_V42: ACTIVE</div>
-    <video id="v" preload="auto" loop playsinline autoplay></video>
+    <div id="ui">PROTOTIPO_V43 // ESTADO: <span id="st">INICIALIZANDO...</span></div>
+    <video id="v" autoplay playsinline></video>
     <canvas id="out"></canvas>
 
 <script>
     const video = document.getElementById('v');
     const canvas = document.getElementById('out');
     const ctx = canvas.getContext('2d');
-    const ctrack = new clm.tracker();
+    const status = document.getElementById('st');
+    let latestFace = null;
 
-    // 1. Acceso directo a cámara
-    navigator.mediaDevices.getUserMedia({ video: { width: 400, height: 300 } })
-    .then(stream => {
+    // 1. ARRANCAR CÁMARA (Resolución de seguridad)
+    async function init() {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 480, height: 360 } });
         video.srcObject = stream;
-        video.play();
         
-        // 2. Iniciar motor clásico
-        ctrack.init();
-        ctrack.start(video);
-        drawLoop();
-    });
+        const faceMesh = new FaceMesh({
+            locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
+        });
 
-    function drawLoop() {
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: false, minDetectionConfidence: 0.5 });
+        
+        faceMesh.onResults(res => {
+            if (res.multiFaceLandmarks) {
+                latestFace = res.multiFaceLandmarks[0];
+                status.innerText = "SINCRO_ACTIVA";
+                status.style.color = "#00ffcc";
+            }
+        });
+
+        // Bucle de IA (Separado del dibujo)
+        async function detectionLoop() {
+            if (video.readyState >= 2) {
+                await faceMesh.send({image: video});
+            }
+            // Pequeña pausa para dejar que el navegador respire
+            setTimeout(detectionLoop, 30);
+        }
+        detectionLoop();
+        renderLoop();
+    }
+
+    // 2. BUCLE DE DIBUJO (Independiente y a 60FPS)
+    function renderLoop() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const positions = ctrack.getCurrentPosition();
-
-        if (positions) {
+        if (latestFace) {
             ctx.strokeStyle = "#00ffcc";
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1.5;
             
-            // Dibujamos el contorno facial básico (puntos 0 a 14)
+            // Dibujamos la silueta esencial
+            const silhouette = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+            
             ctx.beginPath();
-            for (let i = 0; i < 15; i++) {
-                const x = (positions[i][0] / 400) * canvas.width;
-                const y = (positions[i][1] / 300) * canvas.height;
+            silhouette.forEach((idx, i) => {
+                const p = latestFace[idx];
+                const x = p.x * canvas.width;
+                const y = p.y * canvas.height;
                 if (i === 0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
-            }
+            });
+            ctx.closePath();
             ctx.stroke();
 
-            // Dibujamos los ojos como orbes de datos
+            // Ojos: El indicador de vida
             ctx.fillStyle = "#fff";
-            [27, 32].forEach(i => {
-                const x = (positions[i][0] / 400) * canvas.width;
-                const y = (positions[i][1] / 300) * canvas.height;
+            [468, 473].forEach(idx => {
+                const p = latestFace[idx];
                 ctx.beginPath();
-                ctx.arc(x, y, 5, 0, Math.PI * 2);
+                ctx.arc(p.x * canvas.width, p.y * canvas.height, 3, 0, 7);
                 ctx.fill();
             });
         }
-
-        requestAnimationFrame(drawLoop);
+        requestAnimationFrame(renderLoop);
     }
+
+    init().catch(e => status.innerText = "ERROR: " + e);
 </script>
 </body>
 </html>
