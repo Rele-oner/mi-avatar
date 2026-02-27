@@ -2,76 +2,79 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V38 ZERO</title>
+    <title>AI Avatar - V39 RESET</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; }
+        body { margin: 0; background: #000; overflow: hidden; color: #00ffcc; font-family: monospace; }
         canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); }
-        video { display: none; }
-        #emergency-hud { position: absolute; top: 10px; left: 10px; color: #ff0055; font-family: monospace; font-size: 10px; }
+        video { position: fixed; top: 0; left: 0; width: 100px; opacity: 0.3; transform: rotateY(180deg); }
+        #msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; }
     </style>
 </head>
 <body>
-    <div id="emergency-hud">CORE_V38: PERFORMANCE_MODE_ACTIVE</div>
+    <div id="msg">CARGANDO NÚCLEO...</div>
+    <video id="v" autoplay playsinline></video>
     <canvas id="out"></canvas>
-    <video id="v" playsinline></video>
 
-<script type="module">
+<script>
     const video = document.getElementById('v');
     const canvas = document.getElementById('out');
-    const ctx = canvas.getContext('2d', { desynchronized: true, alpha: false });
+    const ctx = canvas.getContext('2d');
+    const msg = document.getElementById('msg');
 
-    // Puntos clave mínimos para evitar el colapso (Estructura ósea facial)
-    const MIN_MESH = [
-        [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109, 10]
-    ];
+    // 1. ARRANCAR CÁMARA NATIVA (Sin librerías externas)
+    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
+    .then(stream => {
+        video.srcObject = stream;
+        video.onloadedmetadata = () => {
+            video.play();
+            msg.style.display = 'none';
+            startAI();
+        };
+    })
+    .catch(err => msg.innerText = "ERROR DE CÁMARA: " + err);
 
-    function onResults(res) {
-        // Ajuste de resolución de dibujo para máxima velocidad
-        if (canvas.width !== 320) { canvas.width = 320; canvas.height = 240; }
-        
-        ctx.fillStyle = "#000";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    function startAI() {
+        const faceMesh = new FaceMesh({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+        });
 
-        if (res.multiFaceLandmarks && res.multiFaceLandmarks[0]) {
-            const face = res.multiFaceLandmarks[0];
+        faceMesh.setOptions({
+            maxNumFaces: 1,
+            refineLandmarks: false,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
 
-            // Dibujo ultra-veloz de contorno
-            ctx.strokeStyle = "#00ffcc";
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            MIN_MESH[0].forEach((idx, i) => {
-                const p = face[idx];
-                if (i === 0) ctx.moveTo(p.x * 320, p.y * 240);
-                else ctx.lineTo(p.x * 320, p.y * 240);
-            });
-            ctx.stroke();
+        faceMesh.onResults(res => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Ojos: El alma del avatar (puntos simples)
-            ctx.fillStyle = "#fff";
-            [468, 473].forEach(idx => {
-                const p = face[idx];
-                ctx.fillRect(p.x * 320 - 1, p.y * 240 - 1, 2, 2);
-            });
+            if (res.multiFaceLandmarks && res.multiFaceLandmarks[0]) {
+                const face = res.multiFaceLandmarks[0];
+                ctx.strokeStyle = "#00ffcc";
+                ctx.lineWidth = 2;
+                
+                // Dibujo simplificado de ojos y boca para verificar movimiento
+                [ [33, 133], [263, 362], [13, 14] ].forEach(pair => {
+                    ctx.beginPath();
+                    const p1 = face[pair[0]];
+                    const p2 = face[pair[1]];
+                    ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
+                    ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
+                    ctx.stroke();
+                });
+            }
+        });
+
+        // 2. BUCLE DE PROCESAMIENTO MANUAL
+        async function detect() {
+            await faceMesh.send({image: video});
+            requestAnimationFrame(detect);
         }
+        detect();
     }
-
-    const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
-    faceMesh.setOptions({
-        maxNumFaces: 1,
-        refineLandmarks: false,
-        minDetectionConfidence: 0.4,
-        minTrackingConfidence: 0.4
-    });
-    faceMesh.onResults(onResults);
-
-    const camera = new Camera(video, {
-        onFrame: async () => { await faceMesh.send({image: video}); },
-        width: 320, height: 240 // Resolución mínima absoluta
-    });
-    camera.start();
 </script>
 </body>
 </html>
