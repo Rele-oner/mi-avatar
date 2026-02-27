@@ -2,80 +2,71 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V41 KINETIC</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
+    <title>AI Avatar - V42 BYPASS</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clmtrackr/1.1.2/clmtrackr.min.js"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; }
-        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); position: absolute; }
-        video { position: fixed; bottom: 10px; right: 10px; width: 120px; opacity: 0.6; transform: rotateY(180deg); border: 1px solid #00ffcc; }
+        body { margin: 0; background: #000; overflow: hidden; color: #00ffcc; font-family: monospace; }
+        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); position: absolute; top: 0; left: 0; }
+        video { position: fixed; bottom: 10px; right: 10px; width: 120px; opacity: 0.4; transform: rotateY(180deg); border: 1px solid #00ffcc; }
+        #log { position: fixed; top: 10px; left: 10px; font-size: 10px; }
     </style>
 </head>
 <body>
-    <video id="v" autoplay playsinline></video>
+    <div id="log">BYPASS_ENGINE_V42: ACTIVE</div>
+    <video id="v" preload="auto" loop playsinline autoplay></video>
     <canvas id="out"></canvas>
 
 <script>
     const video = document.getElementById('v');
     const canvas = document.getElementById('out');
-    const ctx = canvas.getContext('2d', { alpha: false });
-    let lastPoints = null;
+    const ctx = canvas.getContext('2d');
+    const ctrack = new clm.tracker();
 
-    // 1. ARRANCAR VIDEO NATIVO
-    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } })
-    .then(s => { video.srcObject = s; startAI(); });
-
-    function startAI() {
-        const faceMesh = new FaceMesh({
-            locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
-        });
-
-        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: false, minDetectionConfidence: 0.5 });
-        faceMesh.onResults(res => {
-            if (res.multiFaceLandmarks && res.multiFaceLandmarks[0]) {
-                lastPoints = res.multiFaceLandmarks[0]; // Guardamos datos pero NO dibujamos aquí
-            }
-        });
-
-        // 2. BUCLE DE IA (Corre lo más rápido que pueda el procesador)
-        async function aiLoop() {
-            if (video.readyState >= 2) await faceMesh.send({image: video});
-            setTimeout(aiLoop, 0); 
-        }
-        aiLoop();
-
-        // 3. BUCLE DE DIBUJO (Corre a 60FPS constantes pase lo que pase)
-        function drawLoop() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            ctx.fillStyle = "#000";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            if (lastPoints) {
-                ctx.strokeStyle = "#00ffcc";
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                // Dibujamos solo el contorno facial (Puntos 10 a 152 circulares)
-                const indices = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
-                indices.forEach((idx, i) => {
-                    const p = lastPoints[idx];
-                    if (i === 0) ctx.moveTo(p.x * canvas.width, p.y * canvas.height);
-                    else ctx.lineTo(p.x * canvas.width, p.y * canvas.height);
-                });
-                ctx.closePath();
-                ctx.stroke();
-
-                // Ojos (Siempre vivos)
-                ctx.fillStyle = "#fff";
-                [468, 473].forEach(idx => {
-                    const p = lastPoints[idx];
-                    ctx.beginPath();
-                    ctx.arc(p.x * canvas.width, p.y * canvas.height, 4, 0, 7);
-                    ctx.fill();
-                });
-            }
-            requestAnimationFrame(drawLoop);
-        }
+    // 1. Acceso directo a cámara
+    navigator.mediaDevices.getUserMedia({ video: { width: 400, height: 300 } })
+    .then(stream => {
+        video.srcObject = stream;
+        video.play();
+        
+        // 2. Iniciar motor clásico
+        ctrack.init();
+        ctrack.start(video);
         drawLoop();
+    });
+
+    function drawLoop() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const positions = ctrack.getCurrentPosition();
+
+        if (positions) {
+            ctx.strokeStyle = "#00ffcc";
+            ctx.lineWidth = 2;
+            
+            // Dibujamos el contorno facial básico (puntos 0 a 14)
+            ctx.beginPath();
+            for (let i = 0; i < 15; i++) {
+                const x = (positions[i][0] / 400) * canvas.width;
+                const y = (positions[i][1] / 300) * canvas.height;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Dibujamos los ojos como orbes de datos
+            ctx.fillStyle = "#fff";
+            [27, 32].forEach(i => {
+                const x = (positions[i][0] / 400) * canvas.width;
+                const y = (positions[i][1] / 300) * canvas.height;
+                ctx.beginPath();
+                ctx.arc(x, y, 5, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        requestAnimationFrame(drawLoop);
     }
 </script>
 </body>
