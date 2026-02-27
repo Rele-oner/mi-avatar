@@ -2,21 +2,20 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V35 SINGULARITY</title>
+    <title>AI Avatar - V36 OMNI</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Share Tech Mono', monospace; }
-        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); }
+        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); filter: contrast(1.1) brightness(1.2); }
         video { display: none; }
-        #overlay { position: absolute; inset: 0; pointer-events: none; 
-                   background: radial-gradient(circle, transparent 20%, rgba(0, 20, 20, 0.6) 100%);
-                   box-shadow: inset 0 0 100px #000; z-index: 5; }
+        #interface { position: absolute; inset: 0; pointer-events: none; border: 20px solid rgba(0, 255, 204, 0.05); }
+        .data-stream { position: absolute; color: rgba(0, 255, 204, 0.2); font-size: 8px; writing-mode: vertical-rl; }
     </style>
 </head>
 <body>
-    <div id="overlay"></div>
+    <div id="interface"></div>
     <canvas id="out"></canvas>
     <video id="v" playsinline></video>
 
@@ -24,89 +23,73 @@
     const video = document.getElementById('v');
     const canvas = document.getElementById('out');
     const ctx = canvas.getContext('2d');
-    let frameCount = 0;
+    let frame = 0;
 
-    function drawBioHUD(ctx, face) {
-        const leftCheek = face[234];
-        const rightCheek = face[454];
-        
-        ctx.strokeStyle = "#00ffcc";
-        ctx.lineWidth = 1;
-        // Barras laterales de datos
-        [leftCheek, rightCheek].forEach((p, i) => {
-            const x = p.x * canvas.width;
-            const y = p.y * canvas.height;
+    function drawSystemLines(ctx, face) {
+        const points = [10, 152, 234, 454]; // Arriba, abajo, izq, der
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.1)";
+        ctx.lineWidth = 0.5;
+        points.forEach(i => {
+            const p = face[i];
             ctx.beginPath();
-            ctx.moveTo(x + (i === 0 ? -20 : 20), y - 30);
-            ctx.lineTo(x + (i === 0 ? -20 : 20), y + 30);
+            ctx.moveTo(p.x * canvas.width, p.y * canvas.height);
+            ctx.lineTo(i % 2 === 0 ? 0 : canvas.width, i < 100 ? 0 : canvas.height);
             ctx.stroke();
-            // Nivel aleatorio
-            const h = Math.random() * 40;
-            ctx.fillStyle = "rgba(0, 255, 204, 0.5)";
-            ctx.fillRect(x + (i === 0 ? -25 : 20), y + 30 - h, 5, h);
         });
     }
 
     function onResults(res) {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        frameCount++;
+        frame++;
 
-        // Limpieza con rastro para fluidez
-        ctx.fillStyle = "rgba(0, 2, 2, 0.3)";
+        // Efecto de persistencia retiniana
+        ctx.fillStyle = "rgba(0, 5, 5, 0.2)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         if (res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0) {
             const face = res.multiFaceLandmarks[0];
 
-            // 1. EFECTO DE PROFUNDIDAD (Grid de fondo que sigue a la cara)
-            ctx.strokeStyle = "rgba(0, 255, 204, 0.05)";
-            const centerX = face[1].x * canvas.width;
-            const centerY = face[1].y * canvas.height;
-            for(let i=0; i<10; i++) {
-                ctx.beginPath();
-                ctx.arc(centerX, centerY, (frameCount * 2 + i * 100) % 1000, 0, 7);
-                ctx.stroke();
-            }
+            // 1. DISTORSIÓN DE HOLOGRAMA (Glitch aleatorio)
+            const jitter = Math.random() > 0.95 ? (Math.random() - 0.5) * 10 : 0;
+            ctx.translate(jitter, 0);
 
-            // 2. MALLA DUAL (Efecto Volumen/Glitch)
-            ctx.globalCompositeOperation = "screen";
-            
-            // Capa Fantasma (Roja/Cian)
-            drawConnectors(ctx, face, FACEMESH_TESSELATION, {
-                color: "rgba(255, 0, 100, 0.1)", lineWidth: 0.3
-            });
-            
-            // Capa Principal
-            ctx.shadowBlur = 10;
+            // 2. MALLA DE ALTA DENSIDAD CON "LATIDO"
+            const pulse = Math.sin(frame * 0.1) * 5;
+            ctx.shadowBlur = 10 + pulse;
             ctx.shadowColor = "#00ffcc";
+            
             drawConnectors(ctx, face, FACEMESH_TESSELATION, {
-                color: "rgba(0, 255, 204, 0.25)", lineWidth: 0.7
+                color: "rgba(0, 255, 204, 0.2)", lineWidth: 0.5
             });
 
-            // 3. RASGOS VIVOS
-            drawConnectors(ctx, face, FACEMESH_FACE_OVAL, {color: "#00ffcc", lineWidth: 2});
-            drawConnectors(ctx, face, FACEMESH_LIPS, {color: "#fff", lineWidth: 1.5});
-
-            // 4. OJOS DE ENTIDAD (Con destello vertical)
+            // 3. NÚCLEO FOTÓNICO (Ojos con "sangrado" de luz)
             [468, 473].forEach(idx => {
                 const p = face[idx];
                 ctx.fillStyle = "#fff";
-                ctx.shadowBlur = 25;
-                ctx.beginPath(); ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, 7); ctx.fill();
-                // Rayo láser vertical sutil
-                ctx.fillStyle = "rgba(0, 255, 204, 0.1)";
-                ctx.fillRect(p.x * canvas.width - 0.5, 0, 1, canvas.height);
+                ctx.shadowBlur = 30;
+                ctx.beginPath();
+                ctx.arc(p.x * canvas.width, p.y * canvas.height, 5, 0, 7);
+                ctx.fill();
+                
+                // Anillos de enfoque
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+                ctx.beginPath();
+                ctx.arc(p.x * canvas.width, p.y * canvas.height, 15 + pulse, 0, 7);
+                ctx.stroke();
             });
 
-            drawBioHUD(ctx, face);
-            ctx.globalCompositeOperation = "source-over";
-            ctx.shadowBlur = 0;
+            // 4. ESTRUCTURA CRÍTICA
+            drawConnectors(ctx, face, FACEMESH_FACE_OVAL, {color: "#00ffcc", lineWidth: 2});
+            drawConnectors(ctx, face, FACEMESH_LIPS, {color: "#fff", lineWidth: 1});
+
+            drawSystemLines(ctx, face);
+            ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset glitch
         }
     }
 
     const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
-    faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6});
+    faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6});
     faceMesh.onResults(onResults);
     new Camera(video, {onFrame: async () => {await faceMesh.send({image: video})}, width: 1280, height: 720}).start();
 </script>
