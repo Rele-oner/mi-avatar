@@ -2,25 +2,25 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V30 Synthetic Soul</title>
+    <title>AI Avatar - V31 ENIGMA</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
-        #overlay { position: absolute; inset: 0; pointer-events: none; 
-                   background: radial-gradient(circle, transparent 30%, rgba(0,20,20,0.4) 100%); }
-        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); filter: contrast(1.2) brightness(1.1); }
         video { display: none; }
-        #data-stream { position: absolute; bottom: 20px; right: 20px; color: #00ffcc; font-size: 10px; text-align: right; opacity: 0.5; line-height: 1.5; }
+        #hud { position: absolute; top: 30px; left: 30px; color: #00ffcc; pointer-events: none; border-left: 1px solid #00ffcc; padding-left: 15px; }
+        .glitch { animation: pulse 2s infinite; font-weight: bold; letter-spacing: 2px; }
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
     </style>
 </head>
 <body>
-    <div id="overlay"></div>
-    <div id="data-stream">
-        SIGNAL: ENCRYPTED<br>NODE: ACTIVE_V30<br>LATENCY: 14ms<br><span id="fps">0</span> FPS
+    <div id="hud">
+        <div class="glitch">ENIGMA_ENGINE_V31</div>
+        <div style="font-size: 10px; opacity: 0.7;">NEURAL_DENSITY: MAXIMUM</div>
+        <div id="fps" style="font-size: 14px; color: #fff;">0</div>
     </div>
-
     <canvas id="out"></canvas>
     <video id="v" playsinline></video>
 
@@ -30,57 +30,64 @@
     const ctx = canvas.getContext('2d');
     let lastTime = 0;
 
+    function drawGlow(face) {
+        // Efecto de puntos de datos brillantes
+        ctx.fillStyle = "rgba(0, 255, 204, 0.8)";
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = "#00ffcc";
+        const landmarks = [1, 4, 152, 10, 33, 263, 61, 291]; // Puntos clave
+        landmarks.forEach(i => {
+            const p = face[i];
+            ctx.beginPath();
+            ctx.arc(p.x * canvas.width, p.y * canvas.height, 2, 0, 7);
+            ctx.fill();
+        });
+    }
+
     function onResults(res) {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         
-        // Efecto de rastro (Motion Blur) para suavizar el movimiento
-        ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
+        // Fondo con un poco de "memoria" para el rastro de luz
+        ctx.fillStyle = "rgba(0, 5, 5, 1)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         if (res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0) {
             const face = res.multiFaceLandmarks[0];
 
-            // 1. MALLA DE PROFUNDIDAD (La esencia de la IA)
-            // Dibujamos la tesselación con una línea casi invisible para dar textura
-            ctx.globalCompositeOperation = "screen";
-            drawConnectors(ctx, face, FACEMESH_TESSELATION, {
-                color: "rgba(0, 255, 204, 0.08)",
-                lineWidth: 0.5
-            });
-
-            // 2. ESTRUCTURA ÓPTICA (Contornos con Glow)
-            ctx.shadowBlur = 12;
-            ctx.shadowColor = "#00ffcc";
+            // 1. MALLA BASE (Tratamiento de luz acumulativa)
+            ctx.globalAlpha = 0.3;
+            drawConnectors(ctx, face, FACEMESH_TESSELATION, {color: '#00ffcc', lineWidth: 0.5});
             
-            // Ojos - Los hacemos más orgánicos y menos "puntos"
+            // 2. ENFOQUE EN RASGOS (Líneas blancas intensas)
+            ctx.globalAlpha = 0.8;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = "#00ffcc";
+            drawConnectors(ctx, face, FACEMESH_FACE_OVAL, {color: '#00ffcc', lineWidth: 1.5});
+            drawConnectors(ctx, face, FACEMESH_LIPS, {color: '#fff', lineWidth: 1});
+
+            // 3. OJOS "CORE" (Luz blanca pura)
+            ctx.fillStyle = "#fff";
             [468, 473].forEach(idx => {
                 const p = face[idx];
-                const grad = ctx.createRadialGradient(p.x*canvas.width, p.y*canvas.height, 0, p.x*canvas.width, p.y*canvas.height, 8);
-                grad.addColorStop(0, "#fff");
-                grad.addColorStop(1, "rgba(0, 255, 204, 0)");
-                ctx.fillStyle = grad;
                 ctx.beginPath();
-                ctx.arc(p.x*canvas.width, p.y*canvas.height, 8, 0, Math.PI*2);
+                ctx.arc(p.x * canvas.width, p.y * canvas.height, 7, 0, 7);
                 ctx.fill();
             });
 
-            // Labios y Cejas (Líneas finas de datos)
-            drawConnectors(ctx, face, FACEMESH_LIPS, {color: "rgba(255, 255, 255, 0.4)", lineWidth: 1});
-            drawConnectors(ctx, face, FACEMESH_FACE_OVAL, {color: "rgba(0, 255, 204, 0.6)", lineWidth: 1.5});
-
+            drawGlow(face);
             ctx.shadowBlur = 0;
-            ctx.globalCompositeOperation = "source-over";
+            ctx.globalAlpha = 1.0;
         }
 
-        // Efecto de ruido digital estático
-        if(Math.random() > 0.98) {
-            ctx.fillStyle = "rgba(0, 255, 204, 0.05)";
-            ctx.fillRect(0, Math.random()*canvas.height, canvas.width, 2);
+        // 4. POST-PROCESADO: RUIDO Y VIGNETTE
+        ctx.fillStyle = "rgba(0, 255, 204, 0.02)";
+        for (let i = 0; i < 50; i++) {
+            ctx.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 2, 2);
         }
 
         const now = performance.now();
-        document.getElementById('fps').innerText = Math.round(1000 / (now - lastTime));
+        document.getElementById('fps').innerText = Math.round(1000 / (now - lastTime)) + " FPS";
         lastTime = now;
     }
 
