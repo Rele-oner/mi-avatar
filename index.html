@@ -2,29 +2,24 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V24 Safe-Core</title>
+    <title>AI Avatar - V25 Final</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <style>
-        body { margin: 0; background: #050505; overflow: hidden; font-family: 'Courier New', monospace; color: #00ffcc; }
-        #debug-panel { position: absolute; top: 10px; left: 10px; z-index: 100; font-size: 11px; background: rgba(0,0,0,0.8); padding: 10px; border: 1px solid #00ffcc33; }
-        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); object-fit: contain; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
+        #stats { position: absolute; top: 20px; left: 20px; color: #00ffcc; z-index: 10; border-left: 2px solid #00ffcc; padding-left: 15px; background: rgba(0,0,0,0.5); }
+        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); filter: drop-shadow(0 0 10px #00ffcc); }
         video { display: none; }
-        .loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: #000; z-index: 50; flex-direction: column; }
-        .dot { animation: blink 1s infinite; }
-        @keyframes blink { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+        .label { font-size: 9px; opacity: 0.5; letter-spacing: 2px; }
+        .val { font-size: 16px; font-weight: bold; text-shadow: 0 0 8px #00ffcc; }
     </style>
 </head>
 <body>
-    <div id="debug-panel">
-        <div>LOG: <span id="log">INICIANDO...</span></div>
-        <div>FPS: <span id="fps">0</span></div>
-        <div>IA_STATUS: <span id="ia">ESPERANDO</span></div>
-    </div>
-
-    <div id="loader" class="loading">
-        <h2 style="letter-spacing: 5px;">SISTEMA V24<span class="dot">_</span></h2>
-        <p id="sub-msg" style="font-size: 10px; opacity: 0.5;">CARGANDO COMPONENTES NEURALES...</p>
+    <div id="stats">
+        <div class="label">NEURAL_LINK</div>
+        <div class="val">ESTABLE_V25</div>
+        <div class="label" style="margin-top:10px">DATA_FLOW</div>
+        <div id="fps" class="val">0 FPS</div>
     </div>
 
     <canvas id="out"></canvas>
@@ -34,43 +29,62 @@
     const video = document.getElementById('v');
     const canvas = document.getElementById('out');
     const ctx = canvas.getContext('2d');
-    const log = document.getElementById('log');
     let lastTime = 0;
 
-    function updateLog(txt) { log.innerText = txt; }
-
     function onResults(res) {
-        document.getElementById('loader').style.display = 'none';
-        document.getElementById('ia').innerText = "OK";
-        
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         
-        // Dibujamos el video original con un filtro para saber que funciona
-        ctx.save();
-        ctx.filter = "brightness(0.6) sepia(1) hue-rotate(140deg) saturate(3)";
-        ctx.drawImage(res.image, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
+        // Fondo negro puro (Eliminamos la cámara real)
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Dibujamos la máscara IA encima
         if (res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0) {
             const face = res.multiFaceLandmarks[0];
+
+            // 1. DIBUJAR MALLA FACIAL (Efecto Tron)
+            ctx.strokeStyle = "rgba(0, 255, 204, 0.5)";
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            // Dibujamos solo las líneas principales para no saturar
+            const keyPoints = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+            keyPoints.forEach((idx, i) => {
+                const p = face[idx];
+                if(i === 0) ctx.moveTo(p.x * canvas.width, p.y * canvas.height);
+                else ctx.lineTo(p.x * canvas.width, p.y * canvas.height);
+            });
+            ctx.closePath();
+            ctx.stroke();
+
+            // 2. IRIS PROTOCOL (Ojos brillantes)
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = "#00ffcc";
             ctx.fillStyle = "#fff";
             [468, 473].forEach(idx => {
                 const p = face[idx];
                 ctx.beginPath();
-                ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, 7);
+                ctx.arc(p.x * canvas.width, p.y * canvas.height, 5, 0, 7);
                 ctx.fill();
             });
+            ctx.shadowBlur = 0; // Reset para el resto
+
+            // 3. BOCA (Tracking de expresión)
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            [13, 14, 78, 308].forEach((idx, i) => {
+                const p = face[idx];
+                if(i === 0) ctx.moveTo(p.x * canvas.width, p.y * canvas.height);
+                else ctx.lineTo(p.x * canvas.width, p.y * canvas.height);
+            });
+            ctx.stroke();
         }
 
         const now = performance.now();
-        document.getElementById('fps').innerText = Math.round(1000 / (now - lastTime));
+        document.getElementById('fps').innerText = Math.round(1000 / (now - lastTime)) + " FPS";
         lastTime = now;
     }
 
-    // Inicialización paso a paso
-    updateLog("CONFIGURANDO FACE_MESH...");
     const faceMesh = new FaceMesh({
         locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
     });
@@ -84,22 +98,11 @@
 
     faceMesh.onResults(onResults);
 
-    updateLog("SOLICITANDO CÁMARA...");
     const camera = new Camera(video, {
-        onFrame: async () => {
-            updateLog("PROCESANDO FRAME...");
-            await faceMesh.send({image: video});
-        },
+        onFrame: async () => { await faceMesh.send({image: video}); },
         width: 640, height: 480
     });
-
-    camera.start()
-        .then(() => updateLog("CÁMARA OK - ESPERANDO IA"))
-        .catch(e => {
-            updateLog("ERROR CÁMARA");
-            document.getElementById('sub-msg').innerText = "ERROR DE ACCESO A HARDWARE";
-        });
-
+    camera.start();
 </script>
 </body>
 </html>
