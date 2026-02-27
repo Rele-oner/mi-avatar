@@ -2,21 +2,24 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V28 BERSERKER</title>
+    <title>AI Avatar - V29 Neural Overload</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
-        #ui { position: absolute; top: 20px; left: 20px; z-index: 10; border-left: 2px solid #00ffcc; padding-left: 15px; transition: color 0.3s; }
+        #ui { position: absolute; top: 25px; left: 25px; color: #00ffcc; z-index: 10; border-left: 3px solid #00ffcc; padding-left: 20px; text-shadow: 0 0 10px #00ffcc; }
         canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); }
         video { display: none; }
-        .danger { color: #ff3300 !important; border-left-color: #ff3300 !important; }
+        .label { font-size: 10px; opacity: 0.6; letter-spacing: 3px; }
+        .val { font-size: 18px; font-weight: bold; }
     </style>
 </head>
 <body>
     <div id="ui">
-        <div id="mode-text" style="font-size: 9px; opacity: 0.5;">LINK: NOMINAL</div>
-        <div id="fps" style="font-size: 16px; font-weight: bold;">0 FPS</div>
+        <div class="label">NEURAL_DENSITY</div>
+        <div class="val">HIGH_RES_v29</div>
+        <div id="fps" style="font-size: 12px; margin-top:5px;">0 FPS</div>
     </div>
     <canvas id="out"></canvas>
     <video id="v" playsinline></video>
@@ -25,77 +28,76 @@
     const video = document.getElementById('v');
     const canvas = document.getElementById('out');
     const ctx = canvas.getContext('2d');
-    let particles = [];
     let lastTime = 0;
-    let isBerserker = false;
-
-    class Particle {
-        constructor(x, y, color) {
-            this.x = x; this.y = y;
-            this.vx = (Math.random() - 0.5) * 15;
-            this.vy = (Math.random() - 0.5) * 15;
-            this.life = 1.0;
-            this.color = color;
-        }
-        update() { this.x += this.vx; this.y += this.vy; this.life -= 0.03; }
-        draw() {
-            ctx.fillStyle = this.color.replace('1)', `${this.life})`);
-            ctx.fillRect(this.x, this.y, 3, 3);
-        }
-    }
+    let scanLineY = 0;
 
     function onResults(res) {
-        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Fondo: Grid de datos con perspectiva
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.05)";
+        for(let i=0; i<canvas.width; i+=40) { ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke(); }
 
         if (res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0) {
             const face = res.multiFaceLandmarks[0];
-            
-            // LÓGICA DE DETECCIÓN: APERTURA DE BOCA
-            const mouthTop = face[13].y; const mouthBottom = face[14].y;
-            const mouthOpen = Math.abs(mouthTop - mouthBottom);
-            isBerserker = mouthOpen > 0.05; // Umbral de "grito"
 
-            const mainColor = isBerserker ? "rgba(255, 51, 0, 1)" : "rgba(0, 255, 204, 1)";
-            const ui = document.getElementById('ui');
-            ui.className = isBerserker ? 'danger' : '';
-            document.getElementById('mode-text').innerText = isBerserker ? "WARNING: OVERLOAD" : "LINK: NOMINAL";
+            // 1. MALLA COMPLETA (Efecto Complejidad)
+            // Usamos la tesselación pero con una línea ultra-fina
+            ctx.lineWidth = 0.5;
+            ctx.strokeStyle = "rgba(0, 255, 204, 0.15)";
+            drawConnectors(ctx, face, FACEMESH_TESSELATION, {color: 'rgba(0, 255, 204, 0.2)', lineWidth: 0.5});
 
-            // Efecto Shake en modo Berserker
-            if(isBerserker) ctx.translate((Math.random()-0.5)*10, (Math.random()-0.5)*10);
+            // 2. CONTORNOS PRINCIPALES (Efecto HUD)
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#00ffcc";
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = "#00ffcc";
+            drawConnectors(ctx, face, FACEMESH_FACE_OVAL, {color: '#00ffcc', lineWidth: 2});
+            drawConnectors(ctx, face, FACEMESH_LIPS, {color: '#fff', lineWidth: 1});
 
-            // Dibujar Rostro
-            ctx.shadowBlur = isBerserker ? 25 : 15;
-            ctx.shadowColor = isBerserker ? "#ff3300" : "#00ffcc";
-            ctx.strokeStyle = mainColor;
-            ctx.lineWidth = isBerserker ? 4 : 2;
-            
-            ctx.beginPath();
-            [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109].forEach((idx, i) => {
-                const p = face[idx]; i === 0 ? ctx.moveTo(p.x*canvas.width, p.y*canvas.height) : ctx.lineTo(p.x*canvas.width, p.y*canvas.height);
-            });
-            ctx.closePath(); ctx.stroke();
-
-            // Ojos (Iris)
+            // 3. IRIS PROTOCOL (Ojos Divinos)
             ctx.fillStyle = "#fff";
             [468, 473].forEach(idx => {
-                const p = face[idx]; ctx.beginPath(); ctx.arc(p.x*canvas.width, p.y*canvas.height, 6, 0, 7); ctx.fill();
-                if(isBerserker) for(let i=0; i<2; i++) particles.push(new Particle(p.x*canvas.width, p.y*canvas.height, mainColor));
+                const p = face[idx];
+                ctx.beginPath();
+                ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, Math.PI * 2);
+                ctx.fill();
+                // Brillo extra en ojos
+                ctx.shadowBlur = 25;
+                ctx.stroke();
             });
-        }
 
-        particles = particles.filter(p => p.life > 0);
-        particles.forEach(p => { p.update(); p.draw(); });
+            // 4. EFECTO DE ESCANEO (Línea de datos que recorre la cara)
+            scanLineY = (scanLineY + 5) % canvas.height;
+            ctx.fillStyle = "rgba(0, 255, 204, 0.1)";
+            ctx.fillRect(0, scanLineY, canvas.width, 2);
+        }
 
         const now = performance.now();
         document.getElementById('fps').innerText = Math.round(1000 / (now - lastTime)) + " FPS";
         lastTime = now;
     }
 
-    const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
-    faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6});
+    const faceMesh = new FaceMesh({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+
+    faceMesh.setOptions({
+        maxNumFaces: 1,
+        refineLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+
     faceMesh.onResults(onResults);
-    new Camera(video, {onFrame: async () => {await faceMesh.send({image: video})}, width: 640, height: 480}).start();
+
+    const camera = new Camera(video, {
+        onFrame: async () => { await faceMesh.send({image: video}); },
+        width: 1280, height: 720
+    });
+    camera.start();
 </script>
 </body>
 </html>
