@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V34 AETHER</title>
+    <title>AI Avatar - V35 SINGULARITY</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
@@ -10,15 +10,13 @@
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Share Tech Mono', monospace; }
         canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); }
         video { display: none; }
-        #hud-container { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
-        .label { position: absolute; color: #00ffcc; font-size: 10px; border-left: 2px solid #00ffcc; padding-left: 8px; text-transform: uppercase; }
+        #overlay { position: absolute; inset: 0; pointer-events: none; 
+                   background: radial-gradient(circle, transparent 20%, rgba(0, 20, 20, 0.6) 100%);
+                   box-shadow: inset 0 0 100px #000; z-index: 5; }
     </style>
 </head>
 <body>
-    <div id="hud-container">
-        <div class="label" style="top: 50px; left: 50px;">NEURAL_LINK: ACTIVE<br>SYNC_RATE: <span id="sync">98.2</span>%</div>
-        <div class="label" style="bottom: 50px; right: 50px; text-align: right; border-left: 0; border-right: 2px solid #00ffcc; padding-right: 8px;">CORE_TEMP: NOMINAL<br>V34_AETHER_ENGINE</div>
-    </div>
+    <div id="overlay"></div>
     <canvas id="out"></canvas>
     <video id="v" playsinline></video>
 
@@ -26,80 +24,89 @@
     const video = document.getElementById('v');
     const canvas = document.getElementById('out');
     const ctx = canvas.getContext('2d');
-    let lastTime = 0;
-    const particles = [];
+    let frameCount = 0;
 
-    class Particle {
-        constructor(x, y) {
-            this.x = x; this.y = y;
-            this.v = Math.random() * 2 + 1;
-            this.a = 1.0;
-        }
-        update() { this.y -= this.v; this.a -= 0.02; }
+    function drawBioHUD(ctx, face) {
+        const leftCheek = face[234];
+        const rightCheek = face[454];
+        
+        ctx.strokeStyle = "#00ffcc";
+        ctx.lineWidth = 1;
+        // Barras laterales de datos
+        [leftCheek, rightCheek].forEach((p, i) => {
+            const x = p.x * canvas.width;
+            const y = p.y * canvas.height;
+            ctx.beginPath();
+            ctx.moveTo(x + (i === 0 ? -20 : 20), y - 30);
+            ctx.lineTo(x + (i === 0 ? -20 : 20), y + 30);
+            ctx.stroke();
+            // Nivel aleatorio
+            const h = Math.random() * 40;
+            ctx.fillStyle = "rgba(0, 255, 204, 0.5)";
+            ctx.fillRect(x + (i === 0 ? -25 : 20), y + 30 - h, 5, h);
+        });
     }
 
     function onResults(res) {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        
-        // Rastro de luz cinematográfico
-        ctx.fillStyle = "rgba(0, 8, 8, 0.25)";
+        frameCount++;
+
+        // Limpieza con rastro para fluidez
+        ctx.fillStyle = "rgba(0, 2, 2, 0.3)";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         if (res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0) {
             const face = res.multiFaceLandmarks[0];
 
-            // 1. ABERRACIÓN CROMÁTICA (Efecto Pro)
-            ctx.globalCompositeOperation = "screen";
-            
-            // Capa Cian
-            ctx.shadowBlur = 0;
-            drawConnectors(ctx, face, FACEMESH_TESSELATION, {color: "rgba(0, 255, 204, 0.15)", lineWidth: 0.5});
-            
-            // Capa de Brillo Intenso (Solo contornos)
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = "#00ffcc";
-            drawConnectors(ctx, face, FACEMESH_FACE_OVAL, {color: "#00ffcc", lineWidth: 2});
-            
-            // 2. EMISIÓN DE PARTÍCULAS
-            if (Math.random() > 0.8) {
-                const p = face[Math.floor(Math.random() * face.length)];
-                particles.push(new Particle(p.x * canvas.width, p.y * canvas.height));
+            // 1. EFECTO DE PROFUNDIDAD (Grid de fondo que sigue a la cara)
+            ctx.strokeStyle = "rgba(0, 255, 204, 0.05)";
+            const centerX = face[1].x * canvas.width;
+            const centerY = face[1].y * canvas.height;
+            for(let i=0; i<10; i++) {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, (frameCount * 2 + i * 100) % 1000, 0, 7);
+                ctx.stroke();
             }
 
-            // 3. NÚCLEO OCULAR (Ojos con destello)
-            [468, 473].forEach(idx => {
-                const p = face[idx];
-                const x = p.x * canvas.width;
-                const y = p.y * canvas.height;
-                
-                ctx.fillStyle = "#fff";
-                ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();
-                
-                // Líneas de escaneo que nacen de los ojos
-                ctx.strokeStyle = "rgba(0, 255, 204, 0.2)";
-                ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x > canvas.width/2 ? canvas.width : 0, y); ctx.stroke();
+            // 2. MALLA DUAL (Efecto Volumen/Glitch)
+            ctx.globalCompositeOperation = "screen";
+            
+            // Capa Fantasma (Roja/Cian)
+            drawConnectors(ctx, face, FACEMESH_TESSELATION, {
+                color: "rgba(255, 0, 100, 0.1)", lineWidth: 0.3
+            });
+            
+            // Capa Principal
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "#00ffcc";
+            drawConnectors(ctx, face, FACEMESH_TESSELATION, {
+                color: "rgba(0, 255, 204, 0.25)", lineWidth: 0.7
             });
 
+            // 3. RASGOS VIVOS
+            drawConnectors(ctx, face, FACEMESH_FACE_OVAL, {color: "#00ffcc", lineWidth: 2});
+            drawConnectors(ctx, face, FACEMESH_LIPS, {color: "#fff", lineWidth: 1.5});
+
+            // 4. OJOS DE ENTIDAD (Con destello vertical)
+            [468, 473].forEach(idx => {
+                const p = face[idx];
+                ctx.fillStyle = "#fff";
+                ctx.shadowBlur = 25;
+                ctx.beginPath(); ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, 7); ctx.fill();
+                // Rayo láser vertical sutil
+                ctx.fillStyle = "rgba(0, 255, 204, 0.1)";
+                ctx.fillRect(p.x * canvas.width - 0.5, 0, 1, canvas.height);
+            });
+
+            drawBioHUD(ctx, face);
             ctx.globalCompositeOperation = "source-over";
             ctx.shadowBlur = 0;
         }
-
-        // Render y limpieza de partículas
-        particles.forEach((p, i) => {
-            p.update();
-            ctx.fillStyle = `rgba(0, 255, 204, ${p.a})`;
-            ctx.fillRect(p.x, p.y, 2, 2);
-            if (p.a <= 0) particles.splice(i, 1);
-        });
-
-        const now = performance.now();
-        document.getElementById('sync').innerText = (98 + Math.random() * 1.5).toFixed(1);
-        lastTime = now;
     }
 
     const faceMesh = new FaceMesh({locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`});
-    faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6});
+    faceMesh.setOptions({maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6});
     faceMesh.onResults(onResults);
     new Camera(video, {onFrame: async () => {await faceMesh.send({image: video})}, width: 1280, height: 720}).start();
 </script>
