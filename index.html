@@ -2,23 +2,23 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>AI Avatar - V25 Final</title>
+    <title>AI Avatar - V26 Neural Grid</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; }
-        #stats { position: absolute; top: 20px; left: 20px; color: #00ffcc; z-index: 10; border-left: 2px solid #00ffcc; padding-left: 15px; background: rgba(0,0,0,0.5); }
-        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); filter: drop-shadow(0 0 10px #00ffcc); }
+        #ui { position: absolute; top: 20px; left: 20px; color: #00ffcc; z-index: 10; border-left: 2px solid #00ffcc; padding-left: 15px; background: rgba(0,10,10,0.7); }
+        canvas { width: 100vw; height: 100vh; transform: rotateY(180deg); }
         video { display: none; }
         .label { font-size: 9px; opacity: 0.5; letter-spacing: 2px; }
-        .val { font-size: 16px; font-weight: bold; text-shadow: 0 0 8px #00ffcc; }
+        .val { font-size: 16px; font-weight: bold; text-shadow: 0 0 10px #00ffcc; }
     </style>
 </head>
 <body>
-    <div id="stats">
-        <div class="label">NEURAL_LINK</div>
-        <div class="val">ESTABLE_V25</div>
-        <div class="label" style="margin-top:10px">DATA_FLOW</div>
+    <div id="ui">
+        <div class="label">SYSTEM_CORE</div>
+        <div class="val">V26_ACTIVE</div>
+        <div class="label" style="margin-top:10px">NEURAL_SYNC</div>
         <div id="fps" class="val">0 FPS</div>
     </div>
 
@@ -30,55 +30,75 @@
     const canvas = document.getElementById('out');
     const ctx = canvas.getContext('2d');
     let lastTime = 0;
+    let gridOffset = { x: 0, y: 0 };
+
+    function drawGrid(x, y) {
+        ctx.strokeStyle = "rgba(0, 255, 204, 0.15)";
+        ctx.lineWidth = 1;
+        const size = 50;
+        const offX = (x * 30) % size;
+        const offY = (y * 30) % size;
+
+        for (let i = offX; i < canvas.width; i += size) {
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); ctx.stroke();
+        }
+        for (let i = offY; i < canvas.height; i += size) {
+            ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); ctx.stroke();
+        }
+    }
 
     function onResults(res) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
         
-        // Fondo negro puro (Eliminamos la cámara real)
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         if (res.multiFaceLandmarks && res.multiFaceLandmarks.length > 0) {
             const face = res.multiFaceLandmarks[0];
+            const nose = face[1]; // Punto central para el parallax
+            
+            drawGrid(nose.x, nose.y);
 
-            // 1. DIBUJAR MALLA FACIAL (Efecto Tron)
-            ctx.strokeStyle = "rgba(0, 255, 204, 0.5)";
-            ctx.lineWidth = 0.5;
+            // 1. MÁSCARA FACIAL TIPO HUD
+            ctx.shadowBlur = 15; ctx.shadowColor = "#00ffcc";
+            ctx.strokeStyle = "#00ffcc";
+            ctx.lineWidth = 2;
+            
+            // Contorno principal
             ctx.beginPath();
-            // Dibujamos solo las líneas principales para no saturar
-            const keyPoints = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
-            keyPoints.forEach((idx, i) => {
+            const oval = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+            oval.forEach((idx, i) => {
                 const p = face[idx];
                 if(i === 0) ctx.moveTo(p.x * canvas.width, p.y * canvas.height);
                 else ctx.lineTo(p.x * canvas.width, p.y * canvas.height);
             });
-            ctx.closePath();
-            ctx.stroke();
+            ctx.closePath(); ctx.stroke();
 
-            // 2. IRIS PROTOCOL (Ojos brillantes)
-            ctx.shadowBlur = 20;
-            ctx.shadowColor = "#00ffcc";
+            // 2. PROTOCOLO IRIS (Brillo intenso)
             ctx.fillStyle = "#fff";
             [468, 473].forEach(idx => {
                 const p = face[idx];
                 ctx.beginPath();
-                ctx.arc(p.x * canvas.width, p.y * canvas.height, 5, 0, 7);
+                ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, 7);
                 ctx.fill();
             });
-            ctx.shadowBlur = 0; // Reset para el resto
 
-            // 3. BOCA (Tracking de expresión)
+            // 3. BOCA DINÁMICA
             ctx.strokeStyle = "#fff";
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
-            [13, 14, 78, 308].forEach((idx, i) => {
+            [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95].forEach((idx, i) => {
                 const p = face[idx];
                 if(i === 0) ctx.moveTo(p.x * canvas.width, p.y * canvas.height);
                 else ctx.lineTo(p.x * canvas.width, p.y * canvas.height);
             });
-            ctx.stroke();
+            ctx.closePath(); ctx.stroke();
         }
+
+        // Efecto Scanline
+        ctx.fillStyle = "rgba(0, 255, 204, 0.03)";
+        for(let i=0; i<canvas.height; i+=4) ctx.fillRect(0, i, canvas.width, 1);
 
         const now = performance.now();
         document.getElementById('fps').innerText = Math.round(1000 / (now - lastTime)) + " FPS";
@@ -89,13 +109,7 @@
         locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
     });
 
-    faceMesh.setOptions({
-        maxNumFaces: 1,
-        refineLandmarks: true,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-    });
-
+    faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
     faceMesh.onResults(onResults);
 
     const camera = new Camera(video, {
